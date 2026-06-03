@@ -1,0 +1,14 @@
+node_modules
+.next
+.env
+.env.local
+.env.*.local
+.DS_Store
+tsconfig.tsbuildinfo
+.playwright-mcp
+.tmp
+.claude
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*

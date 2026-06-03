@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Warm Data Editorial - Project Trends</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&amp;family=Ibm+Plex+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-tertiary": "#31067e",
+                        "tertiary-fixed": "#a589f8",
+                        "primary-fixed-dim": "#f0b43e",
+                        "surface-container-lowest": "#000000",
+                        "outline-variant": "#404954",
+                        "on-tertiary-fixed": "#000000",
+                        "inverse-primary": "#7d5800",
+                        "on-secondary-fixed-variant": "#00647c",
+                        "surface-dim": "#0a0f13",
+                        "on-error-container": "#ff9b82",
+                        "surface-bright": "#242d37",
+                        "on-primary": "#563b00",
+                        "surface-variant": "#1e2630",
+                        "error-dim": "#c44f34",
+                        "on-surface": "#dee6f4",
+                        "on-error": "#450900",
+                        "tertiary-dim": "#a88cfb",
+                        "surface-container-low": "#0e141a",
+                        "on-tertiary-fixed-variant": "#2e007c",
+                        "surface": "#0a0f13",
+                        "outline": "#6d7682",
+                        "surface-container-highest": "#1e2630",
+                        "inverse-surface": "#f8f9ff",
+                        "on-background": "#dee6f4",
+                        "on-secondary-container": "#52cdf4",
+                        "secondary-fixed": "#b7eaff",
+                        "primary-container": "#b98503",
+                        "secondary-fixed-dim": "#8ce0ff",
+                        "on-primary-fixed": "#412c00",
+                        "tertiary-fixed-dim": "#987cea",
+                        "surface-container-high": "#192029",
+                        "on-secondary": "#004658",
+                        "tertiary": "#b299ff",
+                        "on-primary-fixed-variant": "#664700",
+                        "primary": "#f9bc45",
+                        "secondary": "#5bd5fc",
+                        "secondary-dim": "#49c7ee",
+                        "surface-container": "#141a22",
+                        "on-surface-variant": "#a3acb9",
+                        "on-primary-container": "#100800",
+                        "primary-dim": "#e9af38",
+                        "on-secondary-fixed": "#004557",
+                        "secondary-container": "#004152",
+                        "primary-fixed": "#ffc24a",
+                        "inverse-on-surface": "#51555b",
+                        "on-tertiary-container": "#230062",
+                        "tertiary-container": "#a589f8",
+                        "background": "#0a0f13",
+                        "error-container": "#85230a",
+                        "surface-tint": "#f9bc45",
+                        "error": "#f97758"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    fontFamily: {
+                        "headline": ["Manrope"],
+                        "display": ["Manrope"],
+                        "body": ["Ibm Plex Sans"],
+                        "label": ["Ibm Plex Sans"]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: #0B0D10;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body h-screen flex overflow-hidden">
+<!-- SideNavBar -->
+<aside class="bg-surface-container-low dark:bg-surface-container-low h-screen w-64 border-r border-outline-variant flex-shrink-0 flex flex-col py-6">
+<div class="px-6 mb-8 flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary-container" style="font-variation-settings: 'FILL' 1;">dataset</span>
+</div>
+<div>
+<h1 class="font-headline text-xl font-bold text-primary dark:text-primary leading-none">Warm Data</h1>
+<p class="font-label text-xs text-on-surface-variant mt-1">Editorial Intelligence</p>
+</div>
+</div>
+<nav class="flex-1 overflow-y-auto px-2 space-y-1">
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:text-on-surface transition-colors mx-2 hover:bg-surface-container-high rounded-lg" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:text-on-surface transition-colors mx-2 hover:bg-surface-container-high rounded-lg" href="#">
+<span class="material-symbols-outlined">folder_shared</span>
+<span class="font-label">Projects</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 bg-primary-container text-on-primary-container rounded-xl mx-2 scale-95 duration-150" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">analytics</span>
+<span class="font-label font-medium">Reports</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:text-on-surface transition-colors mx-2 hover:bg-surface-container-high rounded-lg" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label">Settings</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:text-on-surface transition-colors mx-2 hover:bg-surface-container-high rounded-lg" href="#">
+<span class="material-symbols-outlined">admin_panel_settings</span>
+<span class="font-label">Admin</span>
+</a>
+</nav>
+<div class="mt-auto px-6 space-y-4">
+<button class="w-full py-2.5 bg-surface-variant text-on-surface font-label rounded-lg border border-outline-variant hover:bg-surface-container-highest transition-colors flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-sm">add</span>
+                New Analysis
+            </button>
+<div class="border-t border-outline-variant pt-4 space-y-1">
+<a class="flex items-center gap-3 px-2 py-2 text-on-surface-variant hover:text-on-surface transition-colors rounded-lg text-sm" href="#">
+<span class="material-symbols-outlined text-lg">notifications</span>
+<span class="font-label">Notifications</span>
+</a>
+<a class="flex items-center gap-3 px-2 py-2 text-on-surface-variant hover:text-on-surface transition-colors rounded-lg text-sm" href="#">
+<span class="material-symbols-outlined text-lg">help_outline</span>
+<span class="font-label">Support</span>
+</a>
+</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col h-screen overflow-hidden bg-[#0B0D10]">
+<!-- TopAppBar -->
+<header class="bg-surface-dim/80 dark:bg-surface-dim/80 backdrop-blur-md flex justify-between items-center px-8 h-16 w-full border-b border-outline-variant z-50 flex-shrink-0">
+<div class="flex items-center gap-8">
+<div class="font-headline font-black text-xl text-primary">Warm Data Editorial</div>
+<nav class="hidden md:flex gap-6">
+<a class="text-on-surface-variant hover:text-on-surface transition-colors font-label text-sm py-5" href="#">Overview</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-colors font-label text-sm py-5" href="#">Intelligence</a>
+<a class="text-primary border-b-2 border-primary pb-[18px] pt-5 font-label text-sm font-semibold" href="#">Trends</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative hidden md:block">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
+<input class="bg-surface-container border border-outline-variant rounded-full py-1.5 pl-9 pr-4 text-sm font-body text-on-surface focus:outline-none focus:border-primary w-48 placeholder-on-surface-variant/50" placeholder="Search ASIN..." type="text"/>
+</div>
+<button class="text-on-surface-variant hover:text-primary transition-colors hover:opacity-80">
+<span class="material-symbols-outlined">mail</span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-colors hover:opacity-80">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-colors hover:opacity-80">
+<span class="material-symbols-outlined">account_circle</span>
+</button>
+</div>
+</header>
+<!-- Canvas -->
+<div class="flex-1 overflow-y-auto p-8">
+<!-- Toolbar -->
+<div class="flex justify-between items-end mb-8">
+<div>
+<h2 class="font-headline text-2xl font-bold text-on-surface mb-2">纵向趋势分析 (Longitudinal Trends)</h2>
+<p class="font-body text-sm text-on-surface-variant">历史数据表现对比及异动追踪</p>
+</div>
+<div class="flex items-center gap-4">
+<div class="bg-surface-container border border-outline-variant rounded-lg p-1 flex font-label text-sm">
+<button class="px-4 py-1.5 bg-surface-variant text-on-surface rounded-md shadow-sm">7 天</button>
+<button class="px-4 py-1.5 text-on-surface-variant hover:text-on-surface rounded-md">30 天</button>
+<button class="px-4 py-1.5 text-on-surface-variant hover:text-on-surface rounded-md">90 天</button>
+</div>
+<div class="relative">
+<select class="appearance-none bg-[#11151A] border border-[#1D232B] text-on-surface font-label text-sm rounded-lg py-2 pl-4 pr-10 focus:outline-none focus:border-primary">
+<option>B08N5M7S6K (Core Product)</option>
+<option>B09C1L5M4H</option>
+<option>B07XQXZGL2</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none text-lg">expand_more</span>
+</div>
+</div>
+</div>
+<!-- Bento Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+<!-- Price History -->
+<div class="bg-[#11151A] border border-[#1D232B] rounded-[24px] p-6 col-span-1 lg:col-span-2">
+<div class="flex justify-between items-center mb-6">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-sm">payments</span>
+</div>
+<h3 class="font-headline font-semibold text-lg text-on-surface">价格波动趋势 (Price History)</h3>
+</div>
+<div class="flex items-center gap-2 text-sm font-label">
+<span class="w-3 h-3 rounded-full bg-primary"></span>
+<span class="text-on-surface-variant">当前售价 (Current Price)</span>
+<span class="w-3 h-3 rounded-full bg-outline-variant ml-4"></span>
+<span class="text-on-surface-variant">均价 (Avg Price)</span>
+</div>
+</div>
+<div class="h-64 w-full relative">
+<!-- Simulated Line Chart -->
+<div class="absolute inset-0 flex items-end">
+<svg class="w-full h-full stroke-primary fill-none overflow-visible" preserveaspectratio="none" viewbox="0 0 100 40">
+<path class="drop-shadow-[0_0_8px_rgba(245,185,66,0.3)]" d="M0,20 Q10,25 20,15 T40,10 T60,25 T80,5 T100,10" stroke-linejoin="round" stroke-width="0.5"></path>
+<!-- Baseline -->
+<path d="M0,18 L100,18" stroke="#404954" stroke-dasharray="1 2" stroke-width="0.2"></path>
+</svg>
+</div>
+<!-- Grid Lines -->
+<div class="absolute inset-0 flex flex-col justify-between border-l border-b border-[#1D232B] text-[10px] text-outline pt-2">
+<div class="border-t border-[#1D232B] w-full h-0 relative"><span class="absolute -left-6 -top-2">$45</span></div>
+<div class="border-t border-[#1D232B] w-full h-0 relative"><span class="absolute -left-6 -top-2">$40</span></div>
+<div class="border-t border-[#1D232B] w-full h-0 relative"><span class="absolute -left-6 -top-2">$35</span></div>
+<div class="border-t border-[#1D232B] w-full h-0 relative"><span class="absolute -left-6 -top-2">$30</span></div>
+</div>
+</div>
+</div>
+<!-- BSR Trend -->
+<div class="bg-[#11151A] border border-[#1D232B] rounded-[24px] p-6">
+<div class="flex justify-between items-center mb-6">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-secondary/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary text-sm">trending_up</span>
+</div>
+<h3 class="font-headline font-semibold text-lg text-on-surface">大类排名 (BSR)</h3>
+</div>
+</div>
+<div class="h-48 w-full relative">
+<!-- Simulated Line Chart Inverted (Lower is better) -->
+<div class="absolute inset-0 flex items-end">
+<svg class="w-full h-full stroke-secondary fill-none overflow-visible" preserveaspectratio="none" viewbox="0 0 100 40">
+<path d="M0,30 L15,25 L30,28 L45,15 L60,18 L75,10 L90,12 L100,5" stroke-linejoin="round" stroke-width="0.5"></path>
+</svg>
+</div>
+</div>
+</div>
+<!-- Reviews & Rating -->
+<div class="bg-[#11151A] border border-[#1D232B] rounded-[24px] p-6">
+<div class="flex justify-between items-center mb-6">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-tertiary/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-tertiary text-sm">star_rate</span>
+</div>
+<h3 class="font-headline font-semibold text-lg text-on-surface">评价增长 (Reviews &amp; Rating)</h3>
+</div>
+</div>
+<div class="h-48 w-full relative flex items-end gap-2 px-4">
+<!-- Simulated Bar Chart -->
+<div class="w-full bg-surface-container rounded-t-sm h-[20%] relative group">
+<div class="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity">12</div>
+</div>
+<div class="w-full bg-surface-container rounded-t-sm h-[35%] relative group"></div>
+<div class="w-full bg-surface-container rounded-t-sm h-[30%] relative group"></div>
+<div class="w-full bg-surface-container rounded-t-sm h-[50%] relative group"></div>
+<div class="w-full bg-surface-container rounded-t-sm h-[45%] relative group"></div>
+<div class="w-full bg-primary/80 rounded-t-sm h-[70%] relative group border border-primary/50">
+<div class="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] text-primary font-bold">45</div>
+</div>
+<div class="w-full bg-surface-container rounded-t-sm h-[65%] relative group"></div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>
