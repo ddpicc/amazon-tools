@@ -86,16 +86,17 @@ export function formatDigestText(title: string, sections: DigestSections) {
 
 export async function generateAiDigestSections(context: ProjectDigestAiContext) {
   const fallback = buildFallbackDigestSections(context);
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.OPENAI_KEY;
+  const apiUrl = process.env.OPENAI_URL;
 
-  if (!apiKey) {
+  if (!apiKey || !apiUrl) {
     return {
       sections: fallback,
       usedAi: false
     };
   }
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const response = await fetch(apiUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
