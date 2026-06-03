@@ -13,6 +13,12 @@ export default async function ProjectSettingsPage({ params }: { params: { projec
       id: true,
       name: true,
       marketplace: true,
+      settings: {
+        select: {
+          dailyDigestSendHour: true,
+          dailyDigestSendMinute: true
+        }
+      },
       notificationEmail: true,
       notificationChannels: { orderBy: { createdAt: "asc" } }
     }
@@ -27,6 +33,8 @@ export default async function ProjectSettingsPage({ params }: { params: { projec
         projectId={project.id}
         projectName={project.name}
         marketplace={project.marketplace}
+        dailyDigestSendHour={project.settings?.dailyDigestSendHour ?? 9}
+        dailyDigestSendMinute={project.settings?.dailyDigestSendMinute ?? 0}
         channels={channels}
       />
     </div>

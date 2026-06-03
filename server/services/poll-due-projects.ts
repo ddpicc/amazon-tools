@@ -1,4 +1,6 @@
 import { db } from "@/server/db";
+import { PROJECT_DAILY_POLL_HOUR, PROJECT_DAILY_POLL_MINUTE } from "@/lib/project-schedule";
+import { getShanghaiDateKey, getShanghaiStartOfDay, isAfterShanghaiTime } from "@/lib/shanghai-time";
 import { pollProjectMonitoringSubscriptions } from "@/server/services/poll-monitoring-subscriptions";
 
 type DueProjectResult = {
@@ -9,12 +11,20 @@ type DueProjectResult = {
   error?: string;
 };
 
-function minutesSince(date: Date) {
-  return (Date.now() - date.getTime()) / 60000;
-}
-
 export async function pollDueProjects(options?: { limit?: number }) {
   const limit = options?.limit ?? 20;
+  const now = new Date();
+  const todayStart = getShanghaiStartOfDay(now);
+  const todayKey = getShanghaiDateKey(now);
+
+  if (!isAfterShanghaiTime(now, PROJECT_DAILY_POLL_HOUR, PROJECT_DAILY_POLL_MINUTE)) {
+    return {
+      scanned: 0,
+      polled: 0,
+      limit,
+      results: [] as DueProjectResult[]
+    };
+  }
 
   const projects = await db.project.findMany({
     include: {
@@ -69,17 +79,14 @@ export async function pollDueProjects(options?: { limit?: number }) {
       continue;
     }
 
-    if (latestPollJob?.startedAt) {
-      const elapsedMinutes = minutesSince(latestPollJob.startedAt);
-      if (elapsedMinutes < project.syncFrequencyMinutes) {
-        results.push({
-          projectId: project.id,
-          projectName: project.name,
-          polled: false,
-          reason: `not_due:${Math.floor(elapsedMinutes)}/${project.syncFrequencyMinutes}`
-        });
-        continue;
-      }
+    if (latestPollJob?.startedAt && latestPollJob.startedAt >= todayStart) {
+      results.push({
+        projectId: project.id,
+        projectName: project.name,
+        polled: false,
+        reason: `already_polled:${todayKey}`
+      });
+      continue;
     }
 
     try {

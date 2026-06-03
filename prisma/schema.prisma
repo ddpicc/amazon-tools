@@ -99,7 +99,6 @@ model Project {
   userId               String
   name                 String
   marketplace          String
-  syncFrequencyMinutes Int                    @default(1440)
   notificationEmail    String?
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
@@ -168,6 +167,7 @@ model ProductSnapshot {
   reviewCount   Int?
   bsr           Int?
   bsrCategory   Json?
+  sellerCount   Int?
   variantCount  Int?
   stockStatus   String?
   title         String?
@@ -301,6 +301,8 @@ model ApiUsageLog {
 model ProjectSettings {
   id                           String    @id @default(cuid())
   projectId                    String    @unique
+  dailyDigestSendHour          Int       @default(9)
+  dailyDigestSendMinute        Int       @default(0)
   priceChangeThresholdPercent  Decimal?  @db.Decimal(6, 2)
   priceChangeThresholdValue    Decimal?  @db.Decimal(12, 2)
   ratingDropThreshold          Decimal   @default(0.20) @db.Decimal(3, 2)

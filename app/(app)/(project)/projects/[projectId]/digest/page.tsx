@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { auth } from "@/auth";
+import { formatDateTime } from "@/lib/date-time";
+import { formatShanghaiDate } from "@/lib/shanghai-time";
 import { ProjectMonitoringHistory } from "@/components/projects/project-monitoring-history";
 import { MetricCard, Surface } from "@/components/projects/project-workspace-shell";
 import { db } from "@/server/db";
@@ -7,12 +9,14 @@ import { getProjectMonitoringHistory } from "@/server/services/project-monitorin
 
 function statusLabel(status: string) {
   if (status === "SUCCESS") return "Delivered";
+  if (status === "PARTIAL") return "Partial";
   if (status === "FAILED") return "Failed";
   return status;
 }
 
 function statusBadge(status: string) {
   if (status === "SUCCESS") return "border-emerald-500/20 bg-emerald-500/10 text-emerald-400";
+  if (status === "PARTIAL") return "border-amber-500/20 bg-amber-500/10 text-amber-300";
   if (status === "FAILED") return "border-[var(--md-error)]/20 bg-[var(--md-error)]/10 text-[var(--md-error)]";
   return "border-[var(--md-outline-variant)] bg-[var(--md-surface-container)] text-[var(--md-on-surface-variant)]";
 }
@@ -80,14 +84,14 @@ export default async function ProjectDigestPage({ params }: { params: { projectI
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
                   <span className="font-headline text-lg font-semibold text-[var(--md-on-surface)]">
-                    {new Date(digest.digestDate).toLocaleDateString("zh-CN")}
+                    {formatShanghaiDate(new Date(digest.digestDate))}
                   </span>
                   <span className={`rounded-full border px-2 py-0.5 font-label text-[10px] font-bold uppercase tracking-wider ${statusBadge(digest.status)}`}>
                     {statusLabel(digest.status)}
                   </span>
                 </div>
                 <span className="font-label text-xs text-[var(--md-on-surface-variant)]">
-                  {digest.sentAt ? new Date(digest.sentAt).toLocaleString("zh-CN") : "未发送"}
+                  {digest.sentAt ? formatDateTime(digest.sentAt) : "未发送"}
                 </span>
               </div>
               {digest.errorMessage ? <p className="mt-3 font-label text-sm text-[var(--md-error)]">{digest.errorMessage}</p> : null}

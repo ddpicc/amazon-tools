@@ -1,4 +1,5 @@
 import { auth } from '@/auth';
+import { formatDateTime } from '@/lib/date-time';
 import { AlertList } from '@/components/alerts/alert-list';
 import {
   MetricCard,
@@ -11,7 +12,7 @@ import { getProjectApiUsage } from '@/server/services/api-usage';
 import { getProjectOverview } from '@/server/services/project-overview';
 
 function fmtDateTime(v: Date | null) {
-  return v ? new Date(v).toLocaleString('zh-CN') : '-';
+  return formatDateTime(v);
 }
 
 export default async function ProjectDetailPage({
@@ -38,6 +39,8 @@ export default async function ProjectDetailPage({
   const digestCardValue =
     overview.todayDigestSentAt
       ? 'Sent'
+      : overview.todayDigestStatus === 'PARTIAL'
+        ? 'Retrying'
       : overview.todayDigestStatus === 'FAILED'
         ? 'Failed'
         : overview.todayDigestStatus === 'SKIPPED'

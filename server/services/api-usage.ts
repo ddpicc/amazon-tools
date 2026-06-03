@@ -1,7 +1,8 @@
+import { getShanghaiStartOfDay } from "@/lib/shanghai-time";
 import { db } from "@/server/db";
 
 export async function getProjectApiUsage(projectId: string) {
-  const todayStart = new Date(new Date().setHours(0, 0, 0, 0));
+  const todayStart = getShanghaiStartOfDay(new Date());
 
   const [todayRequestConsumed, recentLogs, byApi] = await Promise.all([
     db.apiUsageLog.aggregate({

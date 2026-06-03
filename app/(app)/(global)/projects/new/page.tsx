@@ -65,7 +65,6 @@ export default function NewProjectPage() {
       body: JSON.stringify({
         name,
         marketplace,
-        syncFrequencyMinutes: 1440,
         ownAsins: parseAsinLines(ownAsinsInput),
         competitorAsins: parseAsinLines(competitorAsinsInput)
       })

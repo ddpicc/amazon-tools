@@ -1,13 +1,18 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
+import { isDailyDigestTimeValid } from "@/lib/project-schedule";
 import { db } from "@/server/db";
 import { getProjectStats } from "@/server/services/project-stats";
 import { ensureProjectNotificationChannels } from "@/server/services/notification-channels";
 import { deleteProjectWithSubscriptions } from "@/server/services/project-lifecycle";
 
 const updateProjectSchema = z.object({
-  name: z.string().trim().min(2).max(80).optional()
+  name: z.string().trim().min(2).max(80).optional(),
+  dailyDigestSendTime: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .optional()
 });
 
 export async function GET(
@@ -90,9 +95,50 @@ export async function PATCH(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  let dailyDigestTimeData:
+    | {
+        dailyDigestSendHour: number;
+        dailyDigestSendMinute: number;
+      }
+    | undefined;
+
+  if (parsed.data.dailyDigestSendTime) {
+    const [hourText, minuteText] = parsed.data.dailyDigestSendTime.split(":");
+    const hour = Number(hourText);
+    const minute = Number(minuteText);
+
+    if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+      return NextResponse.json({ error: "Invalid daily digest time" }, { status: 400 });
+    }
+
+    if (!isDailyDigestTimeValid(hour, minute)) {
+      return NextResponse.json({ error: "Daily digest time must be later than 08:00" }, { status: 400 });
+    }
+
+    dailyDigestTimeData = {
+      dailyDigestSendHour: hour,
+      dailyDigestSendMinute: minute
+    };
+  }
+
   const updatedProject = await db.project.update({
     where: { id: project.id },
-    data: parsed.data
+    data: {
+      ...(parsed.data.name ? { name: parsed.data.name } : {}),
+      ...(dailyDigestTimeData
+        ? {
+            settings: {
+              upsert: {
+                create: dailyDigestTimeData,
+                update: dailyDigestTimeData
+              }
+            }
+          }
+        : {})
+    },
+    include: {
+      settings: true
+    }
   });
 
   return NextResponse.json({ project: updatedProject });

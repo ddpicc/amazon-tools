@@ -1,19 +1,39 @@
-import { NotificationChannelType, NotificationDeliveryStatus } from "@prisma/client";
+import { NotificationChannelType, NotificationDeliveryStatus, TrackedAsinRole } from "@prisma/client";
+import { formatClockTime } from "@/lib/shanghai-time";
+import {
+  getShanghaiEndOfDay,
+  getShanghaiStartOfDay,
+  formatShanghaiDate,
+  isAfterShanghaiTime
+} from "@/lib/shanghai-time";
 import { db } from "@/server/db";
-import { ensureProjectNotificationChannels } from "@/server/services/notification-channels";
+import {
+  formatDigestText,
+  generateAiDigestSections,
+  type DigestContextItem,
+  type ProjectDigestAiContext
+} from "@/server/services/ai-digest-summary";
 import { sendEmailMessage } from "@/server/services/email-delivery";
+import { ensureProjectNotificationChannels } from "@/server/services/notification-channels";
 
-function startOfDay(date: Date) {
-  const next = new Date(date);
-  next.setHours(0, 0, 0, 0);
-  return next;
-}
-
-function endOfDay(date: Date) {
-  const next = startOfDay(date);
-  next.setDate(next.getDate() + 1);
-  return next;
-}
+type SnapshotRecord = {
+  capturedAt: Date;
+  price: unknown;
+  rating: unknown;
+  reviewCount: number | null;
+  bsr: number | null;
+  bsrCategory: unknown;
+  sellerCount: number | null;
+  variantCount: number | null;
+  buyboxSeller: string | null;
+  coupon: number | null;
+  asinSalesCount: number | null;
+  listingSaleCount: number | null;
+  listingSaleCountOfDaily: unknown;
+  hasVideo: boolean | null;
+  aPlus: boolean | null;
+  hasBrandStore: boolean | null;
+};
 
 function escapeHtml(value: string) {
   return value
@@ -24,146 +44,318 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#39;");
 }
 
-function severityTone(severity: string) {
-  if (severity === "CRITICAL") {
-    return {
-      bg: "#7f1d1d",
-      fg: "#fecaca",
-      border: "#ef4444"
-    };
+function toNumber(value: unknown) {
+  if (typeof value === "number") {
+    return value;
   }
 
-  if (severity === "WARNING") {
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  if (value && typeof value === "object" && "toNumber" in value && typeof value.toNumber === "function") {
+    return value.toNumber() as number;
+  }
+
+  return null;
+}
+
+function getDailySales(value: unknown) {
+  if (Array.isArray(value) && value.length >= 2 && typeof value[1] === "number") {
+    return value[1];
+  }
+
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if (typeof record.value === "number") {
+      return record.value;
+    }
+    if (typeof record.sales === "number") {
+      return record.sales;
+    }
+    if (typeof record.count === "number") {
+      return record.count;
+    }
+  }
+
+  return null;
+}
+
+function getMonthlySales(snapshot: SnapshotRecord) {
+  return snapshot.asinSalesCount && snapshot.asinSalesCount > 0
+    ? snapshot.asinSalesCount
+    : snapshot.listingSaleCount;
+}
+
+function formatMetricValue(value: number | null, options?: { money?: boolean; signed?: boolean }) {
+  if (value === null) {
+    return "-";
+  }
+
+  if (options?.money) {
+    const prefix = options.signed && value > 0 ? "+" : "";
+    return `${prefix}$${value.toFixed(2)}`;
+  }
+
+  if (options?.signed) {
+    return `${value > 0 ? "+" : ""}${value}`;
+  }
+
+  return `${value}`;
+}
+
+function formatPercentChange(current: number, previous: number) {
+  if (!previous) {
+    return null;
+  }
+
+  const diff = ((current - previous) / previous) * 100;
+  if (!Number.isFinite(diff)) {
+    return null;
+  }
+
+  return `${diff > 0 ? "+" : ""}${diff.toFixed(1)}%`;
+}
+
+function getCategoryRankLabel(value: unknown) {
+  if (!Array.isArray(value) || !value.length) {
+    return null;
+  }
+
+  const primary = value[0];
+  if (!Array.isArray(primary) || primary.length < 3) {
+    return null;
+  }
+
+  const categoryName = typeof primary[0] === "string" ? primary[0] : null;
+  const rank = typeof primary[2] === "number" || typeof primary[2] === "string" ? `#${primary[2]}` : null;
+
+  if (!categoryName && !rank) {
+    return null;
+  }
+
+  return [categoryName, rank].filter(Boolean).join(" ");
+}
+
+function boolLabel(value: boolean | null) {
+  if (value === null) {
+    return null;
+  }
+
+  return value ? "有" : "无";
+}
+
+function pushIfChanged(lines: string[], next: string | null) {
+  if (next) {
+    lines.push(next);
+  }
+}
+
+function buildChangeLines(latest: SnapshotRecord | null, previous: SnapshotRecord | null) {
+  if (!latest) {
+    return [];
+  }
+
+  if (!previous) {
+    return ["今天完成首批快照采集，后续日报会从下一次开始比较变化。"];
+  }
+
+  const lines: string[] = [];
+  const latestPrice = toNumber(latest.price);
+  const previousPrice = toNumber(previous.price);
+  if (latestPrice !== null && previousPrice !== null && latestPrice !== previousPrice) {
+    pushIfChanged(
+      lines,
+      `价格从 ${formatMetricValue(previousPrice, { money: true })} 调整到 ${formatMetricValue(latestPrice, { money: true })}${formatPercentChange(latestPrice, previousPrice) ? `（${formatPercentChange(latestPrice, previousPrice)}）` : ""}`
+    );
+  }
+
+  const latestRating = toNumber(latest.rating);
+  const previousRating = toNumber(previous.rating);
+  if (latestRating !== null && previousRating !== null && latestRating !== previousRating) {
+    pushIfChanged(lines, `评分从 ${previousRating.toFixed(1)} 变为 ${latestRating.toFixed(1)}`);
+  }
+
+  if (
+    latest.reviewCount !== null &&
+    previous.reviewCount !== null &&
+    latest.reviewCount !== previous.reviewCount
+  ) {
+    pushIfChanged(lines, `评论数变化 ${formatMetricValue(latest.reviewCount - previous.reviewCount, { signed: true })}，当前 ${latest.reviewCount}`);
+  }
+
+  if (latest.bsr !== null && previous.bsr !== null && latest.bsr !== previous.bsr) {
+    pushIfChanged(
+      lines,
+      `BSR 从 #${previous.bsr} 变为 #${latest.bsr}${latest.bsr < previous.bsr ? "，排名改善" : "，排名下滑"}`
+    );
+  }
+
+  const latestMonthlySales = getMonthlySales(latest);
+  const previousMonthlySales = getMonthlySales(previous);
+  if (
+    latestMonthlySales !== null &&
+    previousMonthlySales !== null &&
+    latestMonthlySales !== previousMonthlySales
+  ) {
+    pushIfChanged(
+      lines,
+      `月销量估算从 ${previousMonthlySales} 变为 ${latestMonthlySales}`
+    );
+  }
+
+  const latestDailySales = getDailySales(latest.listingSaleCountOfDaily);
+  const previousDailySales = getDailySales(previous.listingSaleCountOfDaily);
+  if (latestDailySales !== null && previousDailySales !== null && latestDailySales !== previousDailySales) {
+    pushIfChanged(lines, `日销量从 ${previousDailySales} 变为 ${latestDailySales}`);
+  }
+
+  if (latest.sellerCount !== null && previous.sellerCount !== null && latest.sellerCount !== previous.sellerCount) {
+    pushIfChanged(lines, `卖家数量从 ${previous.sellerCount} 变为 ${latest.sellerCount}`);
+  }
+
+  if (latest.variantCount !== null && previous.variantCount !== null && latest.variantCount !== previous.variantCount) {
+    pushIfChanged(lines, `变体数从 ${previous.variantCount} 变为 ${latest.variantCount}`);
+  }
+
+  if (latest.buyboxSeller && previous.buyboxSeller && latest.buyboxSeller !== previous.buyboxSeller) {
+    pushIfChanged(lines, `Buybox 卖家从 ${previous.buyboxSeller} 变为 ${latest.buyboxSeller}`);
+  }
+
+  if (latest.coupon !== previous.coupon) {
+    pushIfChanged(lines, `Coupon 从 ${previous.coupon ?? 0} 变为 ${latest.coupon ?? 0}`);
+  }
+
+  if (boolLabel(latest.hasVideo) !== boolLabel(previous.hasVideo)) {
+    pushIfChanged(lines, `主图视频从 ${boolLabel(previous.hasVideo) ?? "-"} 变为 ${boolLabel(latest.hasVideo) ?? "-"}`);
+  }
+
+  if (boolLabel(latest.aPlus) !== boolLabel(previous.aPlus)) {
+    pushIfChanged(lines, `A+ 页面从 ${boolLabel(previous.aPlus) ?? "-"} 变为 ${boolLabel(latest.aPlus) ?? "-"}`);
+  }
+
+  if (boolLabel(latest.hasBrandStore) !== boolLabel(previous.hasBrandStore)) {
+    pushIfChanged(
+      lines,
+      `品牌旗舰店从 ${boolLabel(previous.hasBrandStore) ?? "-"} 变为 ${boolLabel(latest.hasBrandStore) ?? "-"}`
+    );
+  }
+
+  const latestCategoryRank = getCategoryRankLabel(latest.bsrCategory);
+  const previousCategoryRank = getCategoryRankLabel(previous.bsrCategory);
+  if (latestCategoryRank && previousCategoryRank && latestCategoryRank !== previousCategoryRank) {
+    pushIfChanged(lines, `细分类目排名从 ${previousCategoryRank} 变为 ${latestCategoryRank}`);
+  }
+
+  return lines;
+}
+
+function buildLatestMetrics(snapshot: SnapshotRecord | null) {
+  if (!snapshot) {
     return {
-      bg: "#78350f",
-      fg: "#fde68a",
-      border: "#f59e0b"
+      price: null,
+      rating: null,
+      reviewCount: null,
+      bsr: null,
+      bsrCategory: null,
+      monthlySales: null,
+      dailySales: null,
+      sellerCount: null,
+      variantCount: null,
+      buyboxSeller: null,
+      coupon: null,
+      hasVideo: null,
+      aPlus: null,
+      brandStore: null
     };
   }
 
   return {
-    bg: "#0f3b4c",
-    fg: "#bae6fd",
-    border: "#38bdf8"
+    price: toNumber(snapshot.price),
+    rating: toNumber(snapshot.rating),
+    reviewCount: snapshot.reviewCount,
+    bsr: snapshot.bsr,
+    bsrCategory: getCategoryRankLabel(snapshot.bsrCategory),
+    monthlySales: getMonthlySales(snapshot),
+    dailySales: getDailySales(snapshot.listingSaleCountOfDaily),
+    sellerCount: snapshot.sellerCount,
+    variantCount: snapshot.variantCount,
+    buyboxSeller: snapshot.buyboxSeller,
+    coupon: snapshot.coupon,
+    hasVideo: boolLabel(snapshot.hasVideo),
+    aPlus: boolLabel(snapshot.aPlus),
+    brandStore: boolLabel(snapshot.hasBrandStore)
   };
 }
 
-function buildDigestHtml(input: {
-  title: string;
-  projectName: string;
-  marketplace: string;
-  digestDateLabel: string;
-  activeAsinCount: number;
-  counts: {
-    total: number;
-    critical: number;
-    warning: number;
-    info: number;
-  };
-  latestPollLabel: string;
-  importantAlerts: Array<{
-    asin: string;
-    title: string;
-    message: string | null;
-    severity: string;
-  }>;
-}) {
-  const alertItems = input.importantAlerts.length
-    ? input.importantAlerts
-        .map((alert) => {
-          const tone = severityTone(alert.severity);
-          return `
-            <tr>
-              <td style="padding: 0 0 14px 0;">
-                <div style="border: 1px solid #27272a; border-left: 4px solid ${tone.border}; border-radius: 14px; background: #111113; padding: 16px 18px;">
-                  <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
-                    <div style="font-size: 15px; line-height: 22px; font-weight: 600; color: #fafafa;">
-                      ${escapeHtml(alert.asin)} · ${escapeHtml(alert.title)}
-                    </div>
-                    <span style="display: inline-block; border-radius: 999px; padding: 4px 10px; font-size: 11px; font-weight: 700; color: ${tone.fg}; background: ${tone.bg};">
-                      ${escapeHtml(alert.severity)}
-                    </span>
-                  </div>
-                  ${alert.message ? `<div style="margin-top: 8px; font-size: 13px; line-height: 20px; color: #a1a1aa;">${escapeHtml(alert.message)}</div>` : ""}
-                </div>
-              </td>
-            </tr>
-          `;
-        })
-        .join("")
-    : `
-      <tr>
-        <td style="padding: 0;">
-          <div style="border: 1px dashed #3f3f46; border-radius: 14px; background: #111113; padding: 18px; font-size: 14px; line-height: 22px; color: #a1a1aa;">
-            今日没有新增异常，监控状态稳定。
-          </div>
-        </td>
-      </tr>
-    `;
+function buildRecentSnapshots(snapshots: SnapshotRecord[]) {
+  return snapshots.map((snapshot) => ({
+    capturedAt: snapshot.capturedAt.toISOString(),
+    price: toNumber(snapshot.price),
+    rating: toNumber(snapshot.rating),
+    reviewCount: snapshot.reviewCount,
+    bsr: snapshot.bsr,
+    monthlySales: getMonthlySales(snapshot),
+    dailySales: getDailySales(snapshot.listingSaleCountOfDaily),
+    sellerCount: snapshot.sellerCount,
+    buyboxSeller: snapshot.buyboxSeller
+  }));
+}
 
-  return `
-    <!doctype html>
-    <html lang="zh-CN">
-      <body style="margin: 0; padding: 0; background: #09090b; color: #fafafa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background: #09090b; padding: 32px 12px;">
-          <tr>
-            <td align="center">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 680px; background: #18181b; border: 1px solid #27272a; border-radius: 24px; overflow: hidden;">
-                <tr>
-                  <td style="padding: 28px 28px 20px; background: linear-gradient(135deg, rgba(245,158,11,0.16), rgba(24,24,27,1));">
-                    <div style="font-size: 12px; line-height: 18px; letter-spacing: 0.14em; text-transform: uppercase; color: #fbbf24;">Amazon Tools Daily Digest</div>
-                    <div style="margin-top: 10px; font-size: 28px; line-height: 34px; font-weight: 700; color: #fafafa;">${escapeHtml(input.projectName)}</div>
-                    <div style="margin-top: 6px; font-size: 14px; line-height: 22px; color: #d4d4d8;">${escapeHtml(input.marketplace)} · ${escapeHtml(input.digestDateLabel)}</div>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding: 24px 28px 10px;">
-                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-                      <tr>
-                        <td width="50%" style="padding: 0 8px 16px 0;">
-                          <div style="border-radius: 18px; background: #111113; border: 1px solid #27272a; padding: 18px;">
-                            <div style="font-size: 12px; line-height: 18px; color: #a1a1aa;">活跃 ASIN</div>
-                            <div style="margin-top: 8px; font-size: 28px; line-height: 32px; font-weight: 700; color: #fbbf24;">${input.activeAsinCount}</div>
-                          </div>
-                        </td>
-                        <td width="50%" style="padding: 0 0 16px 8px;">
-                          <div style="border-radius: 18px; background: #111113; border: 1px solid #27272a; padding: 18px;">
-                            <div style="font-size: 12px; line-height: 18px; color: #a1a1aa;">今日新增异常</div>
-                            <div style="margin-top: 8px; font-size: 28px; line-height: 32px; font-weight: 700; color: #fafafa;">${input.counts.total}</div>
-                          </div>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td colspan="2" style="padding: 0 0 16px;">
-                          <div style="border-radius: 18px; background: #111113; border: 1px solid #27272a; padding: 18px;">
-                            <div style="font-size: 12px; line-height: 18px; color: #a1a1aa;">异常分布</div>
-                            <div style="margin-top: 10px; font-size: 14px; line-height: 22px; color: #e4e4e7;">
-                              CRITICAL ${input.counts.critical} / WARNING ${input.counts.warning} / INFO ${input.counts.info}
-                            </div>
-                            <div style="margin-top: 8px; font-size: 13px; line-height: 20px; color: #a1a1aa;">
-                              最近轮询：${escapeHtml(input.latestPollLabel)}
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding: 6px 28px 28px;">
-                    <div style="font-size: 18px; line-height: 26px; font-weight: 600; color: #fafafa; margin-bottom: 14px;">重点变化</div>
-                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-                      ${alertItems}
-                    </table>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        </table>
-      </body>
-    </html>
-  `;
+function buildCrossComparisons(ownItems: DigestContextItem[], competitorItems: DigestContextItem[]) {
+  const comparisons: string[] = [];
+
+  for (const ownItem of ownItems) {
+    const ownPrice = typeof ownItem.latestMetrics.price === "number" ? ownItem.latestMetrics.price : null;
+    const ownRating = typeof ownItem.latestMetrics.rating === "number" ? ownItem.latestMetrics.rating : null;
+    const ownBsr = typeof ownItem.latestMetrics.bsr === "number" ? ownItem.latestMetrics.bsr : null;
+    const ownMonthlySales =
+      typeof ownItem.latestMetrics.monthlySales === "number" ? ownItem.latestMetrics.monthlySales : null;
+
+    for (const competitorItem of competitorItems) {
+      const competitorPrice =
+        typeof competitorItem.latestMetrics.price === "number" ? competitorItem.latestMetrics.price : null;
+      const competitorRating =
+        typeof competitorItem.latestMetrics.rating === "number" ? competitorItem.latestMetrics.rating : null;
+      const competitorBsr =
+        typeof competitorItem.latestMetrics.bsr === "number" ? competitorItem.latestMetrics.bsr : null;
+      const competitorMonthlySales =
+        typeof competitorItem.latestMetrics.monthlySales === "number"
+          ? competitorItem.latestMetrics.monthlySales
+          : null;
+
+      if (ownPrice !== null && competitorPrice !== null && Math.abs(ownPrice - competitorPrice) >= 1) {
+        comparisons.push(
+          `${ownItem.asin} 相比 ${competitorItem.asin}${ownPrice < competitorPrice ? " 价格更低" : " 价格更高"}，价差 ${Math.abs(ownPrice - competitorPrice).toFixed(2)} 美元`
+        );
+      }
+
+      if (ownRating !== null && competitorRating !== null && Math.abs(ownRating - competitorRating) >= 0.2) {
+        comparisons.push(
+          `${ownItem.asin} 相比 ${competitorItem.asin}${ownRating > competitorRating ? " 评分更高" : " 评分更低"}，差值 ${Math.abs(ownRating - competitorRating).toFixed(1)}`
+        );
+      }
+
+      if (ownBsr !== null && competitorBsr !== null && ownBsr !== competitorBsr) {
+        comparisons.push(
+          `${ownItem.asin} 相比 ${competitorItem.asin}${ownBsr < competitorBsr ? " BSR 更靠前" : " BSR 更靠后"}`
+        );
+      }
+
+      if (
+        ownMonthlySales !== null &&
+        competitorMonthlySales !== null &&
+        ownMonthlySales !== competitorMonthlySales
+      ) {
+        comparisons.push(
+          `${ownItem.asin} 相比 ${competitorItem.asin}${ownMonthlySales > competitorMonthlySales ? " 月销量更高" : " 月销量更低"}`
+        );
+      }
+    }
+  }
+
+  return Array.from(new Set(comparisons)).slice(0, 8);
 }
 
 function buildWebhookPayload(text: string, channelType: NotificationChannelType) {
@@ -199,20 +391,138 @@ async function sendDigestToWebhook(channel: { webhookUrl: string; type: Notifica
   }
 }
 
-async function buildProjectDigest(projectId: string, digestDate: Date) {
-  const from = startOfDay(digestDate);
-  const to = endOfDay(digestDate);
+function buildDigestHtml(input: {
+  projectName: string;
+  marketplace: string;
+  digestDateLabel: string;
+  ownCount: number;
+  competitorCount: number;
+  latestPollLabel: string;
+  sections: {
+    overview: string;
+    ownProduct: string;
+    competitors: string;
+    action: string;
+  };
+}) {
+  const sectionRows = [
+    ["今日总览", input.sections.overview],
+    ["你的产品变化", input.sections.ownProduct],
+    ["竞品变化", input.sections.competitors],
+    ["建议关注", input.sections.action]
+  ]
+    .map(
+      ([title, body]) => `
+        <tr>
+          <td style="padding: 0 0 14px 0;">
+            <div style="border: 1px solid #27272a; border-radius: 16px; background: #111113; padding: 18px;">
+              <div style="font-size: 15px; line-height: 22px; font-weight: 600; color: #fafafa;">${escapeHtml(title)}</div>
+              <div style="margin-top: 8px; font-size: 14px; line-height: 24px; color: #d4d4d8;">${escapeHtml(body).replaceAll("\n", "<br />")}</div>
+            </div>
+          </td>
+        </tr>
+      `
+    )
+    .join("");
 
+  return `
+    <!doctype html>
+    <html lang="zh-CN">
+      <body style="margin: 0; padding: 0; background: #09090b; color: #fafafa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background: #09090b; padding: 32px 12px;">
+          <tr>
+            <td align="center">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 680px; background: #18181b; border: 1px solid #27272a; border-radius: 24px; overflow: hidden;">
+                <tr>
+                  <td style="padding: 28px 28px 20px; background: linear-gradient(135deg, rgba(245,158,11,0.16), rgba(24,24,27,1));">
+                    <div style="font-size: 12px; line-height: 18px; letter-spacing: 0.14em; text-transform: uppercase; color: #fbbf24;">Sellumio Daily Digest</div>
+                    <div style="margin-top: 10px; font-size: 28px; line-height: 34px; font-weight: 700; color: #fafafa;">${escapeHtml(input.projectName)}</div>
+                    <div style="margin-top: 6px; font-size: 14px; line-height: 22px; color: #d4d4d8;">${escapeHtml(input.marketplace)} · ${escapeHtml(input.digestDateLabel)}</div>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 24px 28px 10px;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                      <tr>
+                        <td width="50%" style="padding: 0 8px 16px 0;">
+                          <div style="border-radius: 18px; background: #111113; border: 1px solid #27272a; padding: 18px;">
+                            <div style="font-size: 12px; line-height: 18px; color: #a1a1aa;">Own ASIN</div>
+                            <div style="margin-top: 8px; font-size: 28px; line-height: 32px; font-weight: 700; color: #fbbf24;">${input.ownCount}</div>
+                          </div>
+                        </td>
+                        <td width="50%" style="padding: 0 0 16px 8px;">
+                          <div style="border-radius: 18px; background: #111113; border: 1px solid #27272a; padding: 18px;">
+                            <div style="font-size: 12px; line-height: 18px; color: #a1a1aa;">竞品 ASIN</div>
+                            <div style="margin-top: 8px; font-size: 28px; line-height: 32px; font-weight: 700; color: #fafafa;">${input.competitorCount}</div>
+                          </div>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td colspan="2" style="padding: 0 0 16px;">
+                          <div style="border-radius: 18px; background: #111113; border: 1px solid #27272a; padding: 18px;">
+                            <div style="font-size: 12px; line-height: 18px; color: #a1a1aa;">最近拉取</div>
+                            <div style="margin-top: 10px; font-size: 14px; line-height: 22px; color: #e4e4e7;">
+                              ${escapeHtml(input.latestPollLabel)}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 28px 28px;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                      ${sectionRows}
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+    </html>
+  `;
+}
+
+async function buildProjectDigest(projectId: string, digestDate: Date) {
   const project = await db.project.findUnique({
     where: { id: projectId },
-    include: {
-      settings: true,
+    select: {
+      id: true,
+      name: true,
+      marketplace: true,
+      notificationEmail: true,
       trackedAsins: {
         where: { status: "ACTIVE" },
+        orderBy: [{ role: "asc" }, { updatedAt: "desc" }],
         select: {
-          id: true,
           asin: true,
-          role: true
+          title: true,
+          role: true,
+          snapshots: {
+            orderBy: { capturedAt: "desc" },
+            take: 3,
+            select: {
+              capturedAt: true,
+              price: true,
+              rating: true,
+              reviewCount: true,
+              bsr: true,
+              bsrCategory: true,
+              sellerCount: true,
+              variantCount: true,
+              buyboxSeller: true,
+              coupon: true,
+              asinSalesCount: true,
+              listingSaleCount: true,
+              listingSaleCountOfDaily: true,
+              hasVideo: true,
+              aPlus: true,
+              hasBrandStore: true
+            }
+          }
         }
       }
     }
@@ -222,84 +532,106 @@ async function buildProjectDigest(projectId: string, digestDate: Date) {
     throw new Error("Project not found");
   }
 
-  const [alerts, latestPollJob] = await Promise.all([
-    db.alert.findMany({
-      where: {
-        projectId,
-        createdAt: {
-          gte: from,
-          lt: to
-        }
-      },
-      include: {
-        trackedAsin: {
-          select: {
-            asin: true
-          }
-        }
-      },
-      orderBy: [{ severity: "desc" }, { createdAt: "desc" }],
-      take: 50
-    }),
-    db.syncJob.findFirst({
-      where: {
-        projectId,
-        jobType: "monitoring_poll_project"
-      },
-      orderBy: { createdAt: "desc" }
-    })
-  ]);
+  const latestPollJob = await db.syncJob.findFirst({
+    where: {
+      projectId,
+      jobType: "monitoring_poll_project"
+    },
+    orderBy: { createdAt: "desc" }
+  });
 
-  const counts = {
-    total: alerts.length,
-    critical: alerts.filter((item) => item.severity === "CRITICAL").length,
-    warning: alerts.filter((item) => item.severity === "WARNING").length,
-    info: alerts.filter((item) => item.severity === "INFO").length
+  const digestDateLabel = formatShanghaiDate(digestDate);
+  const title = `[日报] ${project.marketplace} · ${project.name} · ${digestDateLabel}`;
+
+  const items = project.trackedAsins.map((trackedAsin) => {
+    const latest = (trackedAsin.snapshots[0] ?? null) as SnapshotRecord | null;
+    const previous = (trackedAsin.snapshots[1] ?? null) as SnapshotRecord | null;
+    const changeLines = buildChangeLines(latest, previous);
+    const recentSnapshots = trackedAsin.snapshots as SnapshotRecord[];
+
+    return {
+      asin: trackedAsin.asin,
+      title: trackedAsin.title,
+      role: trackedAsin.role === TrackedAsinRole.OWN ? "OWN" : "COMPETITOR",
+      latestCapturedAt: latest?.capturedAt.toISOString() ?? null,
+      summaryLines: changeLines,
+      recentSnapshots: buildRecentSnapshots(recentSnapshots),
+      latestMetrics: buildLatestMetrics(latest)
+    } satisfies DigestContextItem;
+  });
+
+  const ownAsins = items.filter((item) => item.role === TrackedAsinRole.OWN);
+  const competitorAsins = items.filter((item) => item.role === TrackedAsinRole.COMPETITOR);
+
+  const context: ProjectDigestAiContext = {
+    project: project.name,
+    marketplace: project.marketplace,
+    digestDate: digestDateLabel,
+    ownAsins,
+    competitorAsins,
+    ownChanges: ownAsins.map((item) => ({
+      asin: item.asin,
+      lines: item.summaryLines
+    })),
+    competitorChanges: competitorAsins
+      .filter((item) => item.summaryLines.length > 0)
+      .map((item) => ({
+        asin: item.asin,
+        lines: item.summaryLines
+      })),
+    crossComparisons: buildCrossComparisons(ownAsins, competitorAsins),
+    stabilityNotes: items
+      .filter((item) => item.summaryLines.length === 0)
+      .map((item) => `${item.asin} 主要指标整体稳定`)
   };
 
-  const importantAlerts = alerts.slice(0, 5);
-  const digestDateLabel = from.toLocaleDateString("zh-CN");
-  const title = `[日报] ${project.marketplace} · ${project.name} · ${digestDateLabel}`;
-  const latestPollLabel = latestPollJob
-    ? `${latestPollJob.status}${latestPollJob.errorMessage ? ` · ${latestPollJob.errorMessage}` : ""}`
-    : "暂无记录";
-  const lines = [
-    title,
-    `活跃 ASIN: ${project.trackedAsins.length}`,
-    `今日新增异常: ${counts.total} 条`,
-    `CRITICAL ${counts.critical} / WARNING ${counts.warning} / INFO ${counts.info}`,
-    `最近轮询: ${latestPollLabel}`,
-    importantAlerts.length ? "重点变化:" : "重点变化: 今日无新增异常"
-  ];
-
-  for (const alert of importantAlerts) {
-    lines.push(`- ${alert.trackedAsin.asin}: ${alert.title}`);
+  let aiResult: Awaited<ReturnType<typeof generateAiDigestSections>>;
+  try {
+    aiResult = await generateAiDigestSections(context);
+  } catch {
+    aiResult = {
+      sections: {
+        overview:
+          "今天的摘要已回退到规则模式，重点可先关注 own 与竞品在价格、评分、评论和 BSR 上的最新差异。",
+        ownProduct:
+          context.ownChanges.flatMap((item) => item.lines.slice(0, 2).map((line) => `${item.asin}：${line}`)).join("；") ||
+          "你的产品今天没有明显变化，核心指标整体稳定。",
+        competitors:
+          context.competitorChanges.flatMap((item) => item.lines.slice(0, 2).map((line) => `${item.asin}：${line}`)).join("；") ||
+          "竞品今天没有明显变化，暂无需要单独点名关注的动作。",
+        action:
+          context.crossComparisons.slice(0, 2).join("；") ||
+          "建议继续关注明天的价格、排名和评论变化，确认当前优势是否持续。"
+      },
+      usedAi: false
+    };
   }
+
+  const latestPollLabel = latestPollJob?.startedAt
+    ? `${latestPollJob.status} · ${latestPollJob.startedAt.toLocaleString("zh-CN", {
+        timeZone: "Asia/Shanghai",
+        hour12: false
+      })}`
+    : "暂无记录";
 
   return {
     project,
     title,
-    summary: lines.join("\n"),
+    summary: formatDigestText(title, aiResult.sections),
     html: buildDigestHtml({
-      title,
       projectName: project.name,
       marketplace: project.marketplace,
       digestDateLabel,
-      activeAsinCount: project.trackedAsins.length,
-      counts,
+      ownCount: ownAsins.length,
+      competitorCount: competitorAsins.length,
       latestPollLabel,
-      importantAlerts: importantAlerts.map((alert) => ({
-        asin: alert.trackedAsin.asin,
-        title: alert.title,
-        message: alert.message,
-        severity: alert.severity
-      }))
+      sections: aiResult.sections
     })
   };
 }
 
 export async function sendProjectDailyDigest(projectId: string, digestDate = new Date()) {
-  const normalizedDate = startOfDay(digestDate);
+  const normalizedDate = getShanghaiStartOfDay(digestDate);
   const existing = await db.dailyDigestRun.findUnique({
     where: {
       projectId_digestDate: {
@@ -325,6 +657,18 @@ export async function sendProjectDailyDigest(projectId: string, digestDate = new
       ((channel.type === NotificationChannelType.FEISHU && Boolean(channel.webhookUrl)) ||
         (channel.type === NotificationChannelType.WECOM && Boolean(channel.webhookUrl)) ||
         (channel.type === NotificationChannelType.EMAIL && Boolean(channel.email)))
+  );
+  const previousChannelResults = Array.isArray(existing?.channelResults)
+    ? (existing?.channelResults as Array<{
+        type: NotificationChannelType;
+        status: NotificationDeliveryStatus;
+        errorMessage?: string;
+      }>)
+    : [];
+  const successfulChannelTypes = new Set(
+    previousChannelResults
+      .filter((item) => item.status === NotificationDeliveryStatus.SUCCESS)
+      .map((item) => item.type)
   );
 
   if (!externalChannels.length) {
@@ -360,13 +704,14 @@ export async function sendProjectDailyDigest(projectId: string, digestDate = new
     };
   }
 
+  const channelsToSend = externalChannels.filter((channel) => !successfulChannelTypes.has(channel.type));
   const channelResults = [] as Array<{
     type: NotificationChannelType;
     status: NotificationDeliveryStatus;
     errorMessage?: string;
   }>;
 
-  for (const channel of externalChannels) {
+  for (const channel of channelsToSend) {
     try {
       if (channel.type === NotificationChannelType.EMAIL) {
         if (!channel.email) {
@@ -422,10 +767,46 @@ export async function sendProjectDailyDigest(projectId: string, digestDate = new
     }
   }
 
-  const successCount = channelResults.filter((item) => item.status === NotificationDeliveryStatus.SUCCESS).length;
-  const failedCount = channelResults.filter((item) => item.status === NotificationDeliveryStatus.FAILED).length;
+  const mergedChannelResults = new Map<
+    NotificationChannelType,
+    {
+      type: NotificationChannelType;
+      status: NotificationDeliveryStatus;
+      errorMessage?: string;
+    }
+  >();
+
+  for (const result of previousChannelResults) {
+    mergedChannelResults.set(result.type, result);
+  }
+
+  for (const result of channelResults) {
+    mergedChannelResults.set(result.type, result);
+  }
+
+  const finalChannelResults = externalChannels
+    .map((channel) => mergedChannelResults.get(channel.type))
+    .filter(
+      (
+        item
+      ): item is {
+        type: NotificationChannelType;
+        status: NotificationDeliveryStatus;
+        errorMessage?: string;
+      } => Boolean(item)
+    );
+
+  const successCount = finalChannelResults.filter((item) => item.status === NotificationDeliveryStatus.SUCCESS).length;
+  const failedCount = finalChannelResults.filter((item) => item.status === NotificationDeliveryStatus.FAILED).length;
+  const pendingCount = externalChannels.length - successCount;
   const status =
-    successCount > 0 ? "SUCCESS" : failedCount > 0 ? "FAILED" : "SKIPPED";
+    successCount === externalChannels.length
+      ? "SUCCESS"
+      : successCount > 0
+        ? "PARTIAL"
+        : failedCount > 0
+          ? "FAILED"
+          : "SKIPPED";
 
   const run = await db.dailyDigestRun.upsert({
     where: {
@@ -434,22 +815,22 @@ export async function sendProjectDailyDigest(projectId: string, digestDate = new
         digestDate: normalizedDate
       }
     },
-    create: {
-      projectId,
-      digestDate: normalizedDate,
-      status,
-      summary,
-      channelResults,
-      errorMessage: failedCount ? `${failedCount} channels failed` : null,
-      sentAt: successCount > 0 ? new Date() : null
-    },
-    update: {
-      status,
-      summary,
-      channelResults,
-      errorMessage: failedCount ? `${failedCount} channels failed` : null,
-      sentAt: successCount > 0 ? new Date() : null
-    }
+      create: {
+        projectId,
+        digestDate: normalizedDate,
+        status,
+        summary,
+        channelResults: finalChannelResults,
+        errorMessage: failedCount || pendingCount ? `${failedCount || pendingCount} channels pending retry` : null,
+        sentAt: successCount > 0 ? new Date() : null
+      },
+      update: {
+        status,
+        summary,
+        channelResults: finalChannelResults,
+        errorMessage: failedCount || pendingCount ? `${failedCount || pendingCount} channels pending retry` : null,
+        sentAt: successCount > 0 ? new Date() : null
+      }
   });
 
   return {
@@ -463,7 +844,10 @@ export async function sendProjectDailyDigest(projectId: string, digestDate = new
 
 export async function runDueDailyDigests(options?: { limit?: number; digestDate?: Date }) {
   const limit = options?.limit ?? 20;
-  const digestDate = startOfDay(options?.digestDate ?? new Date());
+  const now = options?.digestDate ?? new Date();
+  const digestDate = getShanghaiStartOfDay(now);
+  const dayEnd = getShanghaiEndOfDay(now);
+
   const projects = await db.project.findMany({
     where: {
       trackedAsins: {
@@ -474,10 +858,27 @@ export async function runDueDailyDigests(options?: { limit?: number; digestDate?
     },
     select: {
       id: true,
-      name: true
+      name: true,
+      settings: {
+        select: {
+          dailyDigestSendHour: true,
+          dailyDigestSendMinute: true
+        }
+      },
+      dailyDigestRuns: {
+        where: {
+          digestDate: {
+            gte: digestDate,
+            lt: dayEnd
+          }
+        },
+        select: {
+          status: true
+        },
+        take: 1
+      }
     },
-    orderBy: { updatedAt: "asc" },
-    take: limit
+    orderBy: { updatedAt: "asc" }
   });
 
   const results = [] as Array<{
@@ -486,20 +887,65 @@ export async function runDueDailyDigests(options?: { limit?: number; digestDate?
     status: string;
     reason?: string;
   }>;
+  let attempted = 0;
 
   for (const project of projects) {
-    const result = await sendProjectDailyDigest(project.id, digestDate);
-    results.push({
-      projectId: project.id,
-      projectName: project.name,
-      status: result.skipped ? "SKIPPED" : result.run?.status ?? "FAILED",
-      reason: result.skipped ? result.reason : undefined
-    });
+    const digestHour = project.settings?.dailyDigestSendHour ?? 9;
+    const digestMinute = project.settings?.dailyDigestSendMinute ?? 0;
+
+    if (!isAfterShanghaiTime(now, digestHour, digestMinute)) {
+      results.push({
+        projectId: project.id,
+        projectName: project.name,
+        status: "SKIPPED",
+        reason: `not_due:${formatClockTime(digestHour, digestMinute)}`
+      });
+      continue;
+    }
+
+    if (project.dailyDigestRuns[0]?.status === "SUCCESS") {
+      results.push({
+        projectId: project.id,
+        projectName: project.name,
+        status: "SKIPPED",
+        reason: "already_sent"
+      });
+      continue;
+    }
+
+    if (attempted >= limit) {
+      results.push({
+        projectId: project.id,
+        projectName: project.name,
+        status: "SKIPPED",
+        reason: "limit_reached"
+      });
+      continue;
+    }
+
+    try {
+      const result = await sendProjectDailyDigest(project.id, digestDate);
+      attempted += 1;
+      results.push({
+        projectId: project.id,
+        projectName: project.name,
+        status: result.skipped ? "SKIPPED" : result.run?.status ?? "FAILED",
+        reason: result.skipped ? result.reason : undefined
+      });
+    } catch (error) {
+      attempted += 1;
+      results.push({
+        projectId: project.id,
+        projectName: project.name,
+        status: "FAILED",
+        reason: error instanceof Error ? error.message : "digest_failed"
+      });
+    }
   }
 
   return {
     digestDate,
-    attempted: projects.length,
+    attempted,
     results
   };
 }

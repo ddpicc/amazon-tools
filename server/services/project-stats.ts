@@ -1,8 +1,9 @@
 import { TrackedAsinRole } from "@prisma/client";
+import { getShanghaiStartOfDay } from "@/lib/shanghai-time";
 import { db } from "@/server/db";
 
 export async function getProjectStats(projectId: string) {
-  const todayStart = new Date(new Date().setHours(0, 0, 0, 0));
+  const todayStart = getShanghaiStartOfDay(new Date());
 
   const [trackedAsinCount, ownAsinCount, competitorAsinCount, todayAlertCount, lastSync] = await Promise.all([
     db.trackedAsin.count({ where: { projectId } }),

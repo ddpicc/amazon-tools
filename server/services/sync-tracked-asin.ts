@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { getShanghaiStartOfDay } from "@/lib/shanghai-time";
 import { db } from "@/server/db";
 import { fetchAsinSubscriptionCollection } from "@/server/sorftime/subscriptions";
 import {
@@ -35,8 +36,7 @@ export async function syncTrackedAsin(trackedAsinId: string, options: SyncTracke
   }
 
   const manualRefreshLimit = trackedAsin.project.settings?.manualRefreshLimitPerDay ?? 10;
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
+  const todayStart = getShanghaiStartOfDay(new Date());
 
   const todaysManualSyncCount = await db.syncJob.count({
     where: {
@@ -96,6 +96,7 @@ export async function syncTrackedAsin(trackedAsinId: string, options: SyncTracke
         reviewCount: snapshot.data.reviewCount,
         bsr: snapshot.data.bsr,
         bsrCategory: toNullableJsonValue(snapshot.data.bsrCategory),
+        sellerCount: snapshot.data.sellerCount,
         variantCount: snapshot.data.variantCount,
         stockStatus: snapshot.data.stockStatus,
         title: snapshot.data.title,

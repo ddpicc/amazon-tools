@@ -70,6 +70,7 @@ export type SorftimeProductSnapshot = {
   reviewCount: number;
   bsr: number;
   bsrCategory: Prisma.InputJsonValue | null;
+  sellerCount: number | null;
   variantCount: number;
   stockStatus: string;
   hasVideo: boolean | null;
@@ -170,6 +171,7 @@ export function mapSorftimeProductObjectToSnapshot(
     reviewCount: data.RatingsCount ?? 0,
     bsr: data.Rank ?? 0,
     bsrCategory: data.BsrCategory ? (data.BsrCategory as Prisma.InputJsonValue) : null,
+    sellerCount: data.SellerCount ?? null,
     variantCount: data.VariationASINCount ?? 0,
     stockStatus: (data.SellerCount ?? 0) > 0 ? "in_stock" : "unknown",
     hasVideo: data.HasVideo ?? null,

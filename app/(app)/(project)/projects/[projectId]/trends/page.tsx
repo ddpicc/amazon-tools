@@ -12,96 +12,67 @@ function mv(v: number | null, fmt?: (v: number) => string) {
   return v === null ? "-" : fmt ? fmt(v) : String(v);
 }
 
-function formatStructuredLabel(value: string) {
-  return value
-    .replaceAll(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replaceAll(/[_-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+function getDailySales(value: unknown) {
+  if (Array.isArray(value) && value.length >= 2 && typeof value[1] === "number") {
+    return value[1];
+  }
+
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if (typeof record.value === "number") {
+      return record.value;
+    }
+    if (typeof record.sales === "number") {
+      return record.sales;
+    }
+    if (typeof record.count === "number") {
+      return record.count;
+    }
+  }
+
+  return null;
 }
 
-function renderStructuredValue(value: unknown, depth = 0): React.ReactNode {
-  if (value === null || value === undefined || value === "") {
-    return <span className="text-[var(--md-on-surface-variant)]">-</span>;
+function getMonthlySales(asinSalesCount: number | null, listingSaleCount: number | null) {
+  return asinSalesCount && asinSalesCount > 0 ? asinSalesCount : listingSaleCount;
+}
+
+function getBsrCategoryRows(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [] as Array<{ name: string; rank: string | null }>;
   }
 
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-    return <span className="break-all text-[var(--md-on-surface)]">{String(value)}</span>;
+  return value
+    .map((item) => {
+      if (!Array.isArray(item) || item.length < 3) {
+        return null;
+      }
+
+      const name = typeof item[0] === "string" ? item[0] : null;
+      const rankValue = item[2];
+      const rank =
+        typeof rankValue === "string" || typeof rankValue === "number"
+          ? `#${rankValue}`
+          : null;
+
+      if (!name) {
+        return null;
+      }
+
+      return { name, rank };
+    })
+    .filter((item): item is { name: string; rank: string | null } => Boolean(item));
+}
+
+function getDescriptionLines(value: string | null | undefined) {
+  if (!value) {
+    return [];
   }
 
-  if (Array.isArray(value)) {
-    if (!value.length) {
-      return <span className="text-[var(--md-on-surface-variant)]">-</span>;
-    }
-
-    const primitiveItems = value.every(
-      (item) =>
-        item === null ||
-        item === undefined ||
-        typeof item === "string" ||
-        typeof item === "number" ||
-        typeof item === "boolean"
-    );
-
-    if (primitiveItems) {
-      return (
-        <div className="flex flex-wrap gap-2">
-          {value.map((item, index) => (
-            <span
-              key={`${String(item)}-${index}`}
-              className="rounded-full border border-[var(--md-outline-variant)] bg-[var(--md-surface-container)] px-3 py-1 text-xs text-[var(--md-on-surface)]"
-            >
-              {String(item)}
-            </span>
-          ))}
-        </div>
-      );
-    }
-
-    return (
-      <div className="space-y-3">
-        {value.map((item, index) => (
-          <div
-            key={index}
-            className="rounded-xl border border-[var(--md-outline-variant)]/50 bg-[var(--md-surface-container)] p-3"
-          >
-            {renderStructuredValue(item, depth + 1)}
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>).filter(
-      ([, entryValue]) =>
-        entryValue !== null &&
-        entryValue !== undefined &&
-        !(typeof entryValue === "string" && entryValue.trim() === "")
-    );
-
-    if (!entries.length) {
-      return <span className="text-[var(--md-on-surface-variant)]">-</span>;
-    }
-
-    return (
-      <div className={depth === 0 ? "grid gap-3" : "grid gap-2"}>
-        {entries.map(([key, entryValue]) => (
-          <div
-            key={key}
-            className="rounded-xl border border-[var(--md-outline-variant)]/50 bg-[var(--md-surface-container)] p-3"
-          >
-            <p className="text-xs uppercase tracking-[0.12em] text-[var(--md-on-surface-variant)]">
-              {formatStructuredLabel(key)}
-            </p>
-            <div className="mt-2 text-sm">{renderStructuredValue(entryValue, depth + 1)}</div>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  return <span className="break-all text-[var(--md-on-surface)]">{String(value)}</span>;
+  return value
+    .split(/<br\s*\/?>/gi)
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 export default async function ProjectTrendsPage({
@@ -196,8 +167,8 @@ export default async function ProjectTrendsPage({
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <MetricCard label="当前价格" ownValue={mv(snapshot?.price ?? null, (v) => `$${v.toFixed(2)}`)} footer={<span className="font-label text-xs text-[var(--md-on-surface-variant)]">{selectedAsin.role === TrackedAsinRole.OWN ? "Own listing" : "Competitor listing"}</span>} />
         <MetricCard label="当前评分" ownValue={mv(snapshot?.rating ?? null)} footer={<span className="font-label text-xs text-[var(--md-on-surface-variant)]">{selectedAsin.brand ?? "Brand unavailable"}</span>} />
-        <MetricCard label="评论数" ownValue={mv(snapshot?.reviewCount ?? null)} footer={<span className="font-label text-xs text-[var(--md-on-surface-variant)]">{selectedAsin.category ?? "Category unavailable"}</span>} />
-        <MetricCard label="当前 BSR" ownValue={mv(snapshot?.bsr ?? null)} footer={<span className="font-label text-xs text-[var(--md-on-surface-variant)]">{snapshotOverview.hasTodaySnapshot ? "Today snapshot" : "Latest available snapshot"}</span>} />
+        <MetricCard label="评论数" ownValue={mv(snapshot?.reviewCount ?? null)} footer={<span className="font-label text-xs text-[var(--md-on-surface-variant)]">{snapshotOverview.hasTodaySnapshot ? "Today snapshot" : "Latest available snapshot"}</span>} />
+        <MetricCard label="当前 BSR" ownValue={mv(snapshot?.bsr ?? null)} footer={<span className="font-label text-xs text-[var(--md-on-surface-variant)]">{snapshot?.category ?? selectedAsin.category ?? "Category unavailable"}</span>} />
       </div>
 
       <Surface>
@@ -221,23 +192,34 @@ export default async function ProjectTrendsPage({
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Surface>
-            <h3 className="font-headline text-lg font-semibold text-[var(--md-on-surface)]">定价与销量</h3>
+            <h3 className="font-headline text-lg font-semibold text-[var(--md-on-surface)]">销量与排名</h3>
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <div className="rounded-2xl border border-[var(--md-outline-variant)]/50 bg-[var(--md-surface-container-lowest)] p-4">
-                <p className="text-sm text-[var(--md-on-surface-variant)]">标价</p>
-                <p className="mt-2 text-2xl font-semibold text-[var(--md-on-surface)]">{mv(snapshot.listPrice ?? null, (v) => `$${v.toFixed(2)}`)}</p>
+                <p className="text-sm text-[var(--md-on-surface-variant)]">月销量</p>
+                <p className="mt-2 text-2xl font-semibold text-[var(--md-on-surface)]">{mv(getMonthlySales(snapshot.asinSalesCount ?? null, snapshot.listingSaleCount ?? null))}</p>
               </div>
               <div className="rounded-2xl border border-[var(--md-outline-variant)]/50 bg-[var(--md-surface-container-lowest)] p-4">
-                <p className="text-sm text-[var(--md-on-surface-variant)]">Coupon</p>
-                <p className="mt-2 text-2xl font-semibold text-[var(--md-on-surface)]">{mv(snapshot.coupon ?? null)}</p>
+                <p className="text-sm text-[var(--md-on-surface-variant)]">每日销量</p>
+                <p className="mt-2 text-2xl font-semibold text-[var(--md-on-surface)]">{mv(getDailySales(snapshot.listingSaleCountOfDaily))}</p>
               </div>
-              <div className="rounded-2xl border border-[var(--md-outline-variant)]/50 bg-[var(--md-surface-container-lowest)] p-4">
-                <p className="text-sm text-[var(--md-on-surface-variant)]">销量估算</p>
-                <p className="mt-2 text-2xl font-semibold text-[var(--md-on-surface)]">{mv(snapshot.asinSalesCount ?? null)}</p>
-              </div>
-              <div className="rounded-2xl border border-[var(--md-outline-variant)]/50 bg-[var(--md-surface-container-lowest)] p-4">
-                <p className="text-sm text-[var(--md-on-surface-variant)]">Listing 销量</p>
-                <p className="mt-2 text-2xl font-semibold text-[var(--md-on-surface)]">{mv(snapshot.listingSaleCount ?? null)}</p>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-[var(--md-outline-variant)]/50 bg-[var(--md-surface-container-lowest)] p-4">
+              <p className="text-sm text-[var(--md-on-surface-variant)]">细分类目排名</p>
+              <div className="mt-3 space-y-3">
+                {getBsrCategoryRows(snapshot.bsrCategory).length ? (
+                  getBsrCategoryRows(snapshot.bsrCategory).map((item) => (
+                    <div
+                      key={`${item.name}-${item.rank ?? "-"}`}
+                      className="flex items-center justify-between gap-4 rounded-xl bg-[var(--md-surface-container)] px-4 py-3"
+                    >
+                      <span className="text-sm font-medium text-[var(--md-on-surface)]">{item.name}</span>
+                      <span className="text-sm font-semibold text-[var(--md-primary)]">{item.rank ?? "-"}</span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-[var(--md-on-surface-variant)]">暂无细分类目排名</p>
+                )}
               </div>
             </div>
           </Surface>
@@ -258,8 +240,8 @@ export default async function ProjectTrendsPage({
                 <p className="mt-2 text-lg font-semibold text-[var(--md-on-surface)]">{snapshot.buyboxSeller ?? "-"}</p>
               </div>
               <div className="rounded-2xl border border-[var(--md-outline-variant)]/50 bg-[var(--md-surface-container-lowest)] p-4">
-                <p className="text-sm text-[var(--md-on-surface-variant)]">在线天数</p>
-                <p className="mt-2 text-2xl font-semibold text-[var(--md-on-surface)]">{mv(snapshot.onlineDays ?? null)}</p>
+                <p className="text-sm text-[var(--md-on-surface-variant)]">卖家数量</p>
+                <p className="mt-2 text-2xl font-semibold text-[var(--md-on-surface)]">{mv(snapshot.sellerCount ?? null)}</p>
               </div>
             </div>
           </Surface>
@@ -280,42 +262,48 @@ export default async function ProjectTrendsPage({
                 <p className="mt-2 text-base font-semibold text-[var(--md-on-surface)]">{mv(snapshot.shipCost ?? null)}</p>
               </div>
               <div className="rounded-2xl border border-[var(--md-outline-variant)]/50 bg-[var(--md-surface-container-lowest)] p-4">
+                <p className="text-sm text-[var(--md-on-surface-variant)]">Coupon</p>
+                <p className="mt-2 text-base font-semibold text-[var(--md-on-surface)]">{mv(snapshot.coupon ?? null)}</p>
+              </div>
+              <div className="rounded-2xl border border-[var(--md-outline-variant)]/50 bg-[var(--md-surface-container-lowest)] p-4">
                 <p className="text-sm text-[var(--md-on-surface-variant)]">上架日期</p>
                 <p className="mt-2 text-base font-semibold text-[var(--md-on-surface)]">{snapshot.onlineDate ? new Date(snapshot.onlineDate).toLocaleDateString("zh-CN") : "-"}</p>
               </div>
               <div className="rounded-2xl border border-[var(--md-outline-variant)]/50 bg-[var(--md-surface-container-lowest)] p-4">
-                <p className="text-sm text-[var(--md-on-surface-variant)]">Video</p>
-                <p className="mt-2 text-base font-semibold text-[var(--md-on-surface)]">{snapshot.hasVideo ? "Yes" : "No"}</p>
+                <p className="text-sm text-[var(--md-on-surface-variant)]">在线天数</p>
+                <p className="mt-2 text-base font-semibold text-[var(--md-on-surface)]">{mv(snapshot.onlineDays ?? null)}</p>
               </div>
               <div className="rounded-2xl border border-[var(--md-outline-variant)]/50 bg-[var(--md-surface-container-lowest)] p-4">
-                <p className="text-sm text-[var(--md-on-surface-variant)]">A+</p>
-                <p className="mt-2 text-base font-semibold text-[var(--md-on-surface)]">{snapshot.aPlus ? "Yes" : "No"}</p>
+                <p className="text-sm text-[var(--md-on-surface-variant)]">主图视频</p>
+                <p className="mt-2 text-base font-semibold text-[var(--md-on-surface)]">{snapshot.hasVideo ? "有" : "无"}</p>
               </div>
               <div className="rounded-2xl border border-[var(--md-outline-variant)]/50 bg-[var(--md-surface-container-lowest)] p-4">
-                <p className="text-sm text-[var(--md-on-surface-variant)]">Brand Store</p>
-                <p className="mt-2 text-base font-semibold text-[var(--md-on-surface)]">{snapshot.hasBrandStore ? "Yes" : "No"}</p>
+                <p className="text-sm text-[var(--md-on-surface-variant)]">A+页面</p>
+                <p className="mt-2 text-base font-semibold text-[var(--md-on-surface)]">{snapshot.aPlus ? "有" : "无"}</p>
+              </div>
+              <div className="rounded-2xl border border-[var(--md-outline-variant)]/50 bg-[var(--md-surface-container-lowest)] p-4">
+                <p className="text-sm text-[var(--md-on-surface-variant)]">品牌旗舰店</p>
+                <p className="mt-2 text-base font-semibold text-[var(--md-on-surface)]">{snapshot.hasBrandStore ? "有" : "无"}</p>
               </div>
             </div>
           </Surface>
 
           <Surface className="lg:col-span-2">
-            <h3 className="font-headline text-lg font-semibold text-[var(--md-on-surface)]">详情字段</h3>
+            <h3 className="font-headline text-lg font-semibold text-[var(--md-on-surface)]">五点描述</h3>
             <div className="mt-5 space-y-4">
               <div className="rounded-2xl border border-[var(--md-outline-variant)]/50 bg-[var(--md-surface-container-lowest)] p-4">
-                <p className="text-sm text-[var(--md-on-surface-variant)]">描述</p>
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[var(--md-on-surface)]">{snapshot.description ?? "-"}</p>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-2xl border border-[var(--md-outline-variant)]/50 bg-[var(--md-surface-container-lowest)] p-4">
-                  <p className="text-sm text-[var(--md-on-surface-variant)]">每日销量明细</p>
-                  <div className="mt-3 text-sm">
-                    {renderStructuredValue(snapshot.listingSaleCountOfDaily)}
+                {getDescriptionLines(snapshot.description).length ? (
+                  <div className="space-y-3">
+                    {getDescriptionLines(snapshot.description).map((item, index) => (
+                      <div key={`${index}-${item}`} className="flex gap-3 text-sm leading-6 text-[var(--md-on-surface)]">
+                        <span className="mt-[0.6rem] h-1.5 w-1.5 flex-none rounded-full bg-[var(--md-primary)]" />
+                        <span>{item}</span>
+                      </div>
+                    ))}
                   </div>
-                </div>
-                <div className="rounded-2xl border border-[var(--md-outline-variant)]/50 bg-[var(--md-surface-container-lowest)] p-4">
-                  <p className="text-sm text-[var(--md-on-surface-variant)]">BSR 类目</p>
-                  <div className="mt-3 text-sm">{renderStructuredValue(snapshot.bsrCategory)}</div>
-                </div>
+                ) : (
+                  <p className="text-sm text-[var(--md-on-surface-variant)]">暂无五点描述</p>
+                )}
               </div>
             </div>
           </Surface>

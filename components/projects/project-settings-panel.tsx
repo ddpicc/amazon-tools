@@ -2,11 +2,18 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { formatClockTime } from "@/lib/shanghai-time";
+import {
+  getProjectDailyPollTimeLabel,
+  isDailyDigestTimeValid
+} from "@/lib/project-schedule";
 
 type ProjectSettingsPanelProps = {
   projectId: string;
   projectName: string;
   marketplace: string;
+  dailyDigestSendHour: number;
+  dailyDigestSendMinute: number;
   channels: Array<{
     type: "INBOX" | "FEISHU" | "WECOM" | "EMAIL";
     enabled: boolean;
@@ -105,10 +112,15 @@ export function ProjectSettingsPanel({
   projectId,
   projectName,
   marketplace,
+  dailyDigestSendHour,
+  dailyDigestSendMinute,
   channels
 }: ProjectSettingsPanelProps) {
   const router = useRouter();
   const [name, setName] = useState(projectName);
+  const [digestTime, setDigestTime] = useState(
+    formatClockTime(dailyDigestSendHour, dailyDigestSendMinute)
+  );
   const [feishuEnabled, setFeishuEnabled] = useState(getChannel(channels, "FEISHU")?.enabled ?? false);
   const [feishuWebhookUrl, setFeishuWebhookUrl] = useState(getChannel(channels, "FEISHU")?.webhookUrl ?? "");
   const [wecomEnabled, setWecomEnabled] = useState(getChannel(channels, "WECOM")?.enabled ?? false);
@@ -116,6 +128,7 @@ export function ProjectSettingsPanel({
   const [emailEnabled, setEmailEnabled] = useState(getChannel(channels, "EMAIL")?.enabled ?? false);
   const [emailAddress, setEmailAddress] = useState(getChannel(channels, "EMAIL")?.email ?? "");
   const [savingProjectName, setSavingProjectName] = useState(false);
+  const [savingDigestTime, setSavingDigestTime] = useState(false);
   const [savingChannel, setSavingChannel] = useState<null | "FEISHU" | "WECOM" | "EMAIL">(null);
   const [deleting, setDeleting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -138,6 +151,36 @@ export function ProjectSettingsPanel({
     }
 
     setMessage("项目名称更新失败");
+  }
+
+  async function saveDigestTime() {
+    const [hourText, minuteText] = digestTime.split(":");
+    const hour = Number(hourText);
+    const minute = Number(minuteText);
+
+    if (!isDailyDigestTimeValid(hour, minute)) {
+      setMessage("日报时间必须晚于 08:00");
+      return;
+    }
+
+    setSavingDigestTime(true);
+    setMessage(null);
+
+    const response = await fetch(`/api/projects/${projectId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dailyDigestSendTime: digestTime })
+    });
+
+    setSavingDigestTime(false);
+    if (response.ok) {
+      setMessage("日报发送时间已更新");
+      router.refresh();
+      return;
+    }
+
+    const data = await response.json().catch(() => null);
+    setMessage(data?.error ?? "日报时间更新失败");
   }
 
   async function saveChannels(nextState?: {
@@ -308,17 +351,31 @@ export function ProjectSettingsPanel({
 
       <SettingSection
         title="运行规则"
-        description="日报会跟随采集节奏自动生成，并在有可用渠道时发送。"
+        description="系统每天固定拉取一次，日报会在你设定的时间后自动发送。"
       >
         <SettingCard>
-          <SettingRow label="日报生成" description="系统会在每日采集完成后生成摘要。">
+          <SettingRow label="每日拉取" description="系统每天固定在这个时间后检查并拉取最新快照。">
             <div className="rounded-xl border border-[var(--md-outline-variant)] bg-[var(--md-surface-dim)] px-4 py-3 font-label text-sm text-[var(--md-on-surface)]">
-              UTC+8 06:00
+              {getProjectDailyPollTimeLabel()}
             </div>
           </SettingRow>
-          <SettingRow label="外部投递" description="已配置渠道会在生成后立即接收日报。" bordered={false}>
-            <div className="rounded-xl border border-[var(--md-outline-variant)] bg-[var(--md-surface-dim)] px-4 py-3 font-label text-sm text-[var(--md-on-surface)]">
-              UTC+8 07:00
+          <SettingRow label="日报发送" description="必须晚于每日拉取时间，已启用渠道会在生成后接收日报。" bordered={false}>
+            <div className="flex gap-3">
+              <input
+                type="time"
+                value={digestTime}
+                onChange={(event) => setDigestTime(event.target.value)}
+                min="08:01"
+                className="h-11 min-w-0 flex-1 rounded-xl border border-[var(--md-outline-variant)] bg-[var(--md-surface-dim)] px-4 font-label text-sm text-[var(--md-on-surface)] transition focus:border-[var(--md-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--md-primary)]"
+              />
+              <button
+                type="button"
+                onClick={saveDigestTime}
+                disabled={savingDigestTime || digestTime === formatClockTime(dailyDigestSendHour, dailyDigestSendMinute)}
+                className="rounded-xl border border-[var(--md-outline-variant)] px-4 font-label text-sm text-[var(--md-on-surface)] transition hover:bg-[var(--md-surface-container-high)] disabled:opacity-50"
+              >
+                {savingDigestTime ? "保存中..." : "更新"}
+              </button>
             </div>
           </SettingRow>
         </SettingCard>
@@ -337,7 +394,7 @@ export function ProjectSettingsPanel({
             <div className="flex justify-end">
               <button
                 onClick={removeProject}
-                disabled={deleting || savingProjectName || savingChannel !== null}
+                disabled={deleting || savingProjectName || savingDigestTime || savingChannel !== null}
                 className="rounded-xl border border-[var(--md-error)]/30 bg-[var(--md-error)]/10 px-5 py-2.5 font-label text-sm font-semibold text-[var(--md-error)] transition hover:bg-[var(--md-error)]/15 disabled:opacity-60"
               >
                 {deleting ? "删除中..." : "删除项目"}

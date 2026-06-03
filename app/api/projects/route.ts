@@ -8,7 +8,6 @@ import { initializeProjectWithSubscriptions } from "@/server/services/project-li
 const createProjectSchema = z.object({
   name: z.string().min(2),
   marketplace: z.string().min(2),
-  syncFrequencyMinutes: z.number().int().positive().max(10080).default(1440),
   ownAsins: z.array(z.string().min(5)).max(3).default([]),
   competitorAsins: z.array(z.string().min(5)).max(20).default([])
 });
@@ -75,7 +74,6 @@ export async function POST(request: Request) {
       userId: session.user.id,
       name: parsed.data.name,
       marketplace: parsed.data.marketplace,
-      syncFrequencyMinutes: parsed.data.syncFrequencyMinutes,
       ownAsins,
       competitorAsins
     });

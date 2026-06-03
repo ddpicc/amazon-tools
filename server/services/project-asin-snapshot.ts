@@ -1,4 +1,5 @@
 import "server-only";
+import { getShanghaiStartOfDay } from "@/lib/shanghai-time";
 import { db } from "@/server/db";
 
 function decimalToNumber(value: unknown) {
@@ -18,14 +19,8 @@ function decimalToNumber(value: unknown) {
   return null;
 }
 
-function startOfToday() {
-  const date = new Date();
-  date.setHours(0, 0, 0, 0);
-  return date;
-}
-
 export async function getTrackedAsinDailySnapshot(trackedAsinId: string) {
-  const todayStart = startOfToday();
+  const todayStart = getShanghaiStartOfDay(new Date());
 
   const trackedAsin = await db.trackedAsin.findUnique({
     where: { id: trackedAsinId },
@@ -57,6 +52,7 @@ export async function getTrackedAsinDailySnapshot(trackedAsinId: string) {
         reviewCount: true,
         bsr: true,
         bsrCategory: true,
+        sellerCount: true,
         variantCount: true,
         title: true,
         photoUrls: true,
@@ -102,6 +98,7 @@ export async function getTrackedAsinDailySnapshot(trackedAsinId: string) {
         reviewCount: true,
         bsr: true,
         bsrCategory: true,
+        sellerCount: true,
         variantCount: true,
         title: true,
         photoUrls: true,
@@ -155,6 +152,7 @@ export async function getTrackedAsinDailySnapshot(trackedAsinId: string) {
           reviewCount: snapshot.reviewCount,
           bsr: snapshot.bsr,
           bsrCategory: snapshot.bsrCategory,
+          sellerCount: snapshot.sellerCount,
           variantCount: snapshot.variantCount,
           title: snapshot.title,
           photoUrls: snapshot.photoUrls,

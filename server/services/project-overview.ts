@@ -1,10 +1,10 @@
 import { TrackedAsinRole } from "@prisma/client";
+import { getShanghaiStartOfDay } from "@/lib/shanghai-time";
 import { db } from "@/server/db";
 import { diffDaysInclusive } from "@/server/services/project-monitoring-days";
 
 export async function getProjectOverview(projectId: string) {
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
+  const todayStart = getShanghaiStartOfDay(new Date());
 
   const [
     project,

@@ -15,7 +15,6 @@ type InitializeProjectInput = {
   userId: string;
   name: string;
   marketplace: string;
-  syncFrequencyMinutes: number;
   ownAsins: string[];
   competitorAsins: string[];
 };
@@ -26,7 +25,6 @@ export async function initializeProjectWithSubscriptions(input: InitializeProjec
       userId: input.userId,
       name: input.name,
       marketplace: input.marketplace,
-      syncFrequencyMinutes: input.syncFrequencyMinutes,
       settings: {
         create: {}
       },
@@ -90,6 +88,7 @@ export async function initializeProjectWithSubscriptions(input: InitializeProjec
           reviewCount: snapshot.data.reviewCount,
           bsr: snapshot.data.bsr,
           bsrCategory: toNullableJsonValue(snapshot.data.bsrCategory),
+          sellerCount: snapshot.data.sellerCount,
           variantCount: snapshot.data.variantCount,
           stockStatus: snapshot.data.stockStatus,
           title: snapshot.data.title,
