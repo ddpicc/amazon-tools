@@ -1,3 +1,5 @@
+import OpenAI from "openai";
+
 type DigestSections = {
   overview: string;
   ownProduct: string;
@@ -38,6 +40,13 @@ export type ProjectDigestAiContext = {
 };
 
 const defaultModel = process.env.OPENAI_MODEL || "gpt-4o-mini";
+
+function createOpenAIClient(apiKey: string, baseURL: string) {
+  return new OpenAI({
+    apiKey,
+    baseURL: baseURL.replace(/\/+$/, "")
+  });
+}
 
 function normalizeSection(value: unknown, fallback: string) {
   if (typeof value !== "string") {
@@ -96,13 +105,8 @@ export async function generateAiDigestSections(context: ProjectDigestAiContext) 
     };
   }
 
-  const response = await fetch(apiUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
+  const client = createOpenAIClient(apiKey, apiUrl);
+  const response = await client.chat.completions.create({
       model: defaultModel,
       temperature: 0.3,
       response_format: {
@@ -119,23 +123,9 @@ export async function generateAiDigestSections(context: ProjectDigestAiContext) 
           content: JSON.stringify(context, null, 2)
         }
       ]
-    })
-  });
+    });
 
-  if (!response.ok) {
-    const errorBody = await response.text().catch(() => "");
-    throw new Error(`OpenAI digest generation failed: ${response.status}${errorBody ? ` | ${errorBody}` : ""}`);
-  }
-
-  const json = (await response.json()) as {
-    choices?: Array<{
-      message?: {
-        content?: string | null;
-      };
-    }>;
-  };
-
-  const content = json.choices?.[0]?.message?.content;
+  const content = response.choices?.[0]?.message?.content;
   if (!content) {
     return {
       sections: fallback,

@@ -8,7 +8,6 @@ import {
   markMonitoringSubscriptionPolled
 } from "@/server/services/monitoring-subscriptions";
 import { formatOperationalError } from "@/server/services/failure-classification";
-import { generateAlertsForSnapshot } from "@/server/services/generate-alerts";
 
 type SyncTrackedAsinOptions = {
   skipManualLimit?: boolean;
@@ -80,7 +79,6 @@ export async function syncTrackedAsin(trackedAsinId: string, options: SyncTracke
       rawPayload: snapshot.rawPayload as Prisma.InputJsonValue
     }).catch(() => null);
 
-    const latestSnapshot = trackedAsin.snapshots[0] ?? null;
     const createdSnapshot = await db.productSnapshot.create({
       data: {
         trackedAsinId,
@@ -148,7 +146,7 @@ export async function syncTrackedAsin(trackedAsinId: string, options: SyncTracke
       }
     });
 
-    const alerts = latestSnapshot ? await generateAlertsForSnapshot(trackedAsinId) : [];
+    const alerts: Array<never> = [];
 
     await db.syncJob.update({
       where: { id: syncJob.id },
