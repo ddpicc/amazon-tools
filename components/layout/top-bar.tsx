@@ -43,7 +43,9 @@ export function TopBar({
 
   async function handleSignOut() {
     setAccountMenuOpen(false);
-    await signOut({ callbackUrl: '/login' });
+    await signOut({ redirect: false });
+    router.push('/login');
+    router.refresh();
   }
 
   return (
