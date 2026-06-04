@@ -11,6 +11,16 @@ function toNullableJsonValue(value: Prisma.InputJsonValue | null | undefined) {
   return value === null || value === undefined ? Prisma.JsonNull : value;
 }
 
+function normalizeDescriptionWithFallback(current: string, previous: string | null | undefined) {
+  const normalizedCurrent = current.trim();
+  if (normalizedCurrent) {
+    return current;
+  }
+
+  const normalizedPrevious = previous?.trim();
+  return normalizedPrevious ? previous! : current;
+}
+
 type InitializeProjectInput = {
   userId: string;
   name: string;
@@ -72,6 +82,12 @@ export async function initializeProjectWithSubscriptions(input: InitializeProjec
       }
 
       const snapshot = await fetchAsinSubscriptionCollection(trackedAsin.asin, trackedAsin.marketplace);
+      const previousSnapshot = await db.productSnapshot.findFirst({
+        where: { trackedAsinId: trackedAsin.id },
+        orderBy: { capturedAt: "desc" },
+        select: { description: true }
+      });
+      const description = normalizeDescriptionWithFallback(snapshot.data.description, previousSnapshot?.description);
 
       await db.productSnapshot.create({
         data: {
@@ -95,7 +111,7 @@ export async function initializeProjectWithSubscriptions(input: InitializeProjec
           photoUrls: toNullableJsonValue(snapshot.data.photoUrls),
           ebcPhotoUrls: toNullableJsonValue(snapshot.data.ebcPhotoUrls),
           brand: snapshot.data.brand,
-          description: snapshot.data.description,
+          description,
           buyboxSeller: snapshot.data.buyboxSeller,
           buyboxSellerId: snapshot.data.buyboxSellerId,
           isFBA: snapshot.data.isFBA,

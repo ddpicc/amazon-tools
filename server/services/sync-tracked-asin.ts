@@ -14,6 +14,16 @@ type SyncTrackedAsinOptions = {
   jobType?: string;
 };
 
+function normalizeDescriptionWithFallback(current: string, previous: string | null | undefined) {
+  const normalizedCurrent = current.trim();
+  if (normalizedCurrent) {
+    return current;
+  }
+
+  const normalizedPrevious = previous?.trim();
+  return normalizedPrevious ? previous! : current;
+}
+
 function toNullableJsonValue(value: Prisma.InputJsonValue | null | undefined) {
   return value === null || value === undefined ? Prisma.JsonNull : value;
 }
@@ -73,6 +83,8 @@ export async function syncTrackedAsin(trackedAsinId: string, options: SyncTracke
     }
 
     const snapshot = await fetchAsinSubscriptionCollection(trackedAsin.asin, trackedAsin.marketplace);
+    const previousSnapshot = trackedAsin.snapshots[0] ?? null;
+    const description = normalizeDescriptionWithFallback(snapshot.data.description, previousSnapshot?.description);
 
     await markMonitoringSubscriptionPolled(asinSubscription.id, {
       externalStatus: "POLLED",
@@ -101,7 +113,7 @@ export async function syncTrackedAsin(trackedAsinId: string, options: SyncTracke
         photoUrls: toNullableJsonValue(snapshot.data.photoUrls),
         ebcPhotoUrls: toNullableJsonValue(snapshot.data.ebcPhotoUrls),
         brand: snapshot.data.brand,
-        description: snapshot.data.description,
+        description,
         buyboxSeller: snapshot.data.buyboxSeller,
         buyboxSellerId: snapshot.data.buyboxSellerId,
         isFBA: snapshot.data.isFBA,

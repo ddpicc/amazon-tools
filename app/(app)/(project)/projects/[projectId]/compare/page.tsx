@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { auth } from "@/auth";
-import { ComparisonLineChart } from "@/components/charts/comparison-line-chart";
+import { CompareTrendPanels } from "@/components/charts/compare-trend-panels";
 import {
   MetricCard,
   Surface
@@ -8,15 +8,19 @@ import {
 import { db } from "@/server/db";
 import { getProjectTrendOverview } from "@/server/services/project-trends";
 
-const RANGE_OPTIONS = [7, 30, 90] as const;
+const RANGE_OPTIONS = [7, 30] as const;
 
 function mv(v: number | null, fmt?: (v: number) => string) {
   return v === null ? "-" : fmt ? fmt(v) : String(v);
 }
 
+function pct(v: number | null) {
+  return mv(v, (value) => `${value.toFixed(1)}%`);
+}
+
 function parseDays(v?: string) {
   const n = Number(v);
-  return RANGE_OPTIONS.includes(n as (typeof RANGE_OPTIONS)[number]) ? n : 30;
+  return RANGE_OPTIONS.includes(n as (typeof RANGE_OPTIONS)[number]) ? n : 7;
 }
 
 export default async function ProjectComparePage({
@@ -43,12 +47,12 @@ export default async function ProjectComparePage({
     <div className="mx-auto max-w-6xl space-y-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="font-label text-xs uppercase tracking-[0.2em] text-[var(--md-primary)]">Own vs competitor</p>
+          <p className="font-label text-xs uppercase tracking-[0.2em] text-[var(--md-primary)]">Group comparison</p>
           <h1 className="font-headline mt-3 text-3xl font-bold tracking-tight text-[var(--md-on-surface)]">
-            Compare
+            竞品对比
           </h1>
           <p className="mt-2 font-label text-sm text-[var(--md-on-surface-variant)]">
-            对比 own ASIN 与竞品组在价格、评分、评论量和 BSR 上的整体表现。
+            按 own 组与竞品组查看价格、销量、内容质量和生命周期的整体差异，并对单个 ASIN 的趋势进行对照。
           </p>
         </div>
 
@@ -73,41 +77,49 @@ export default async function ProjectComparePage({
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <MetricCard label="Average Price" ownValue={mv(s.ownAveragePrice, (v) => `$${v.toFixed(2)}`)} compValue={mv(s.competitorAveragePrice, (v) => `$${v.toFixed(2)}`)} />
-        <MetricCard label="Average Rating" ownValue={mv(s.ownAverageRating)} compValue={mv(s.competitorAverageRating)} />
-        <MetricCard label="Review Total" ownValue={mv(s.ownTotalReviews)} compValue={mv(s.competitorTotalReviews)} />
-        <MetricCard label="Best BSR" ownValue={mv(s.ownBestBsr)} compValue={mv(s.competitorBestBsr)} />
+        <MetricCard label="平均价格" ownValue={mv(s.ownAveragePrice, (v) => `$${v.toFixed(2)}`)} compValue={mv(s.competitorAveragePrice, (v) => `$${v.toFixed(2)}`)} ownLabel="Own" compLabel="竞品" />
+        <MetricCard label="平均评分" ownValue={mv(s.ownAverageRating)} compValue={mv(s.competitorAverageRating)} ownLabel="Own" compLabel="竞品" />
+        <MetricCard label="平均评论数" ownValue={mv(s.ownAverageReviews)} compValue={mv(s.competitorAverageReviews)} ownLabel="Own" compLabel="竞品" />
+        <MetricCard label="平均 BSR" ownValue={mv(s.ownAverageBsr)} compValue={mv(s.competitorAverageBsr)} ownLabel="Own" compLabel="竞品" />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Surface className="lg:col-span-2">
-          <h3 className="font-headline text-lg font-semibold text-[var(--md-on-surface)]">价格对比趋势</h3>
-          <div className="mt-6 rounded-xl border border-[var(--md-outline-variant)]/50 bg-[var(--md-surface-container-lowest)] p-4">
-            <ComparisonLineChart data={trends.priceTrend} suffix="$" ownColor="#f9bc45" competitorColor="#5bd5fc" />
+        <Surface>
+          <h3 className="font-headline text-lg font-semibold text-[var(--md-on-surface)]">销量表现</h3>
+          <div className="mt-5 grid grid-cols-2 gap-4">
+            <MetricCard label="平均月销量" ownValue={mv(s.ownAverageMonthlySales)} compValue={mv(s.competitorAverageMonthlySales)} ownLabel="Own" compLabel="竞品" />
+            <MetricCard label="平均日销量" ownValue={mv(s.ownAverageDailySales)} compValue={mv(s.competitorAverageDailySales)} ownLabel="Own" compLabel="竞品" />
           </div>
         </Surface>
 
         <Surface>
-          <h3 className="font-headline text-lg font-semibold text-[var(--md-on-surface)]">评分趋势</h3>
-          <div className="mt-6 rounded-xl border border-[var(--md-outline-variant)]/50 bg-[var(--md-surface-container-lowest)] p-4">
-            <ComparisonLineChart data={trends.ratingTrend} ownColor="#f9bc45" competitorColor="#8b5cf6" />
-          </div>
-        </Surface>
-
-        <Surface>
-          <h3 className="font-headline text-lg font-semibold text-[var(--md-on-surface)]">评论量趋势</h3>
-          <div className="mt-6 rounded-xl border border-[var(--md-outline-variant)]/50 bg-[var(--md-surface-container-lowest)] p-4">
-            <ComparisonLineChart data={trends.reviewTrend} ownColor="#f59e0b" competitorColor="#22d3ee" />
+          <h3 className="font-headline text-lg font-semibold text-[var(--md-on-surface)]">Listing 质量</h3>
+          <div className="mt-5 grid grid-cols-2 gap-4">
+            <MetricCard label="FBA 占比" ownValue={pct(s.ownFbaRatio)} compValue={pct(s.competitorFbaRatio)} ownLabel="Own" compLabel="竞品" />
+            <MetricCard label="A+ 覆盖率" ownValue={pct(s.ownAPlusCoverage)} compValue={pct(s.competitorAPlusCoverage)} ownLabel="Own" compLabel="竞品" />
+            <MetricCard label="视频覆盖率" ownValue={pct(s.ownVideoCoverage)} compValue={pct(s.competitorVideoCoverage)} ownLabel="Own" compLabel="竞品" />
+            <MetricCard label="品牌店铺覆盖率" ownValue={pct(s.ownBrandStoreCoverage)} compValue={pct(s.competitorBrandStoreCoverage)} ownLabel="Own" compLabel="竞品" />
           </div>
         </Surface>
 
         <Surface className="lg:col-span-2">
-          <h3 className="font-headline text-lg font-semibold text-[var(--md-on-surface)]">BSR 对比趋势</h3>
-          <div className="mt-6 rounded-xl border border-[var(--md-outline-variant)]/50 bg-[var(--md-surface-container-lowest)] p-4">
-            <ComparisonLineChart data={trends.bsrTrend} ownColor="#34d399" competitorColor="#c084fc" />
+          <h3 className="font-headline text-lg font-semibold text-[var(--md-on-surface)]">生命周期</h3>
+          <div className="mt-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <MetricCard label="平均在线天数" ownValue={mv(s.ownAverageOnlineDays)} compValue={mv(s.competitorAverageOnlineDays)} ownLabel="Own" compLabel="竞品" />
+            <MetricCard label="中位在线天数" ownValue={mv(s.ownMedianOnlineDays)} compValue={mv(s.competitorMedianOnlineDays)} ownLabel="Own" compLabel="竞品" />
+            <MetricCard label="最长在线天数" ownValue={mv(s.ownOldestOnlineDays)} compValue={mv(s.competitorOldestOnlineDays)} ownLabel="Own" compLabel="竞品" />
+            <MetricCard label="最短在线天数" ownValue={mv(s.ownNewestOnlineDays)} compValue={mv(s.competitorNewestOnlineDays)} ownLabel="Own" compLabel="竞品" />
           </div>
         </Surface>
       </div>
+
+      <CompareTrendPanels
+        priceTrend={trends.priceTrend}
+        ratingTrend={trends.ratingTrend}
+        reviewTrend={trends.reviewTrend}
+        bsrTrend={trends.bsrTrend}
+        series={trends.series}
+      />
     </div>
   );
 }

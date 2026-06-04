@@ -68,7 +68,7 @@ export type SorftimeProductSnapshot = {
   coupon: number | null;
   rating: Decimal;
   reviewCount: number;
-  bsr: number;
+  bsr: number | null;
   bsrCategory: Prisma.InputJsonValue | null;
   sellerCount: number | null;
   variantCount: number;
@@ -139,6 +139,7 @@ export function mapSorftimeProductObjectToSnapshot(
 ): SorftimeProductSnapshot {
   const actualPrice = data.SalesPrice ?? data.ListPrice ?? data.Price;
   const originalListPrice = data.Price ?? data.ListPrice ?? data.SalesPrice;
+  const normalizedRank = typeof data.Rank === "number" && data.Rank >= 0 ? data.Rank : null;
 
   return {
     asin: data.ASIN || data.Asin || asinFallback,
@@ -169,7 +170,7 @@ export function mapSorftimeProductObjectToSnapshot(
     coupon: data.Coupon ?? null,
     rating: new Decimal(data.Ratings ?? 0),
     reviewCount: data.RatingsCount ?? 0,
-    bsr: data.Rank ?? 0,
+    bsr: normalizedRank,
     bsrCategory: data.BsrCategory ? (data.BsrCategory as Prisma.InputJsonValue) : null,
     sellerCount: data.SellerCount ?? null,
     variantCount: data.VariationASINCount ?? 0,

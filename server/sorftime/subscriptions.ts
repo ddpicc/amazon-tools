@@ -336,7 +336,19 @@ export async function fetchAsinSubscriptionCollection(
     ),
     mapData(data, meta) {
       const items = extractArray<SorftimeProductObject>(data);
-      const product = items[0] ?? ((data && typeof data === "object") ? (data as SorftimeProductObject) : {});
+      const product = items[0] ?? ((data && typeof data === "object") ? (data as SorftimeProductObject) : null);
+
+      if (!product || !Object.keys(product).length) {
+        const error = new Error(`Sorftime returned empty ASIN subscription payload for ${asin}`);
+        error.name = "SorftimeEmptyDataError";
+        Object.assign(error, {
+          asin,
+          marketplace: meta.marketplace,
+          payload: meta.rawPayload
+        });
+        throw error;
+      }
+
       return mapSorftimeProductObjectToSnapshot(product, meta.marketplace, asin, meta.rawPayload);
     }
   });
