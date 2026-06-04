@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { formatClockTime } from "@/lib/shanghai-time";
@@ -32,17 +33,22 @@ function getChannel(
 function SettingSection({
   title,
   description,
+  action,
   children
 }: {
   title: string;
   description?: string;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section className="space-y-4">
-      <div>
-        <h2 className="font-headline text-xl font-semibold text-[var(--md-on-surface)]">{title}</h2>
-        {description ? <p className="mt-1 font-label text-sm text-[var(--md-on-surface-variant)]">{description}</p> : null}
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h2 className="font-headline text-xl font-semibold text-[var(--md-on-surface)]">{title}</h2>
+          {description ? <p className="mt-1 font-label text-sm text-[var(--md-on-surface-variant)]">{description}</p> : null}
+        </div>
+        {action ? <div className="shrink-0">{action}</div> : null}
       </div>
       {children}
     </section>
@@ -279,6 +285,17 @@ export function ProjectSettingsPanel({
       <SettingSection
         title="通知渠道"
         description="配置日报和告警要发送到哪里。"
+        action={
+          <Link
+            href="/help/webhooks"
+            className="inline-flex items-center gap-2 rounded-xl border border-[var(--md-outline-variant)] px-3 py-2 font-label text-sm text-[var(--md-on-surface-variant)] transition hover:bg-[var(--md-surface-container-high)] hover:text-[var(--md-on-surface)]"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+              <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-2-10H7v2h10V9zm0 4H7v2h7v-2z" />
+            </svg>
+            <span>查看 Webhook 获取指南</span>
+          </Link>
+        }
       >
         <SettingCard>
           <SettingRow label="飞书" description="将日报和告警发送到飞书机器人。">

@@ -9,6 +9,7 @@ type AppShellProps = {
   }>;
   homeHref?: string;
   breadcrumb?: string;
+  helpHref?: string;
   notificationHref?: string;
   unreadNotificationCount?: number;
   children: React.ReactNode;
@@ -18,6 +19,7 @@ export function AppShell({
   sidebarItems,
   homeHref,
   breadcrumb,
+  helpHref,
   notificationHref,
   unreadNotificationCount = 0,
   children
@@ -27,6 +29,7 @@ export function AppShell({
       <TopBar
         homeHref={homeHref}
         breadcrumb={breadcrumb}
+        helpHref={helpHref}
         notificationHref={notificationHref}
         unreadNotificationCount={unreadNotificationCount}
       />

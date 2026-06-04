@@ -8,6 +8,7 @@ import { useState } from 'react';
 type TopBarProps = {
   homeHref?: string;
   breadcrumb?: string;
+  helpHref?: string;
   notificationHref?: string;
   unreadNotificationCount?: number;
   children?: React.ReactNode;
@@ -16,6 +17,7 @@ type TopBarProps = {
 export function TopBar({
   homeHref = '/projects',
   breadcrumb,
+  helpHref = '/help/webhooks',
   notificationHref = '/projects',
   unreadNotificationCount = 0,
   children
@@ -88,6 +90,16 @@ export function TopBar({
             <path d="m21 21-4.3-4.3" />
           </svg>
         </div>
+
+        <Link
+          href={helpHref}
+          className="hidden items-center gap-2 rounded-lg border border-[var(--md-outline-variant)] px-3 py-2 font-label text-sm text-[var(--md-on-surface-variant)] transition hover:bg-[var(--md-surface-container)] hover:text-[var(--md-on-surface)] md:inline-flex"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-2-10H7v2h10V9zm0 4H7v2h7v-2z" />
+          </svg>
+          <span>指南</span>
+        </Link>
 
         {/* Notifications */}
         <button
