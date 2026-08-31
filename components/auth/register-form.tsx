@@ -78,7 +78,7 @@ export function RegisterForm() {
         throw new Error("注册成功，但自动登录失败，请返回登录页手动登录");
       }
 
-      router.push("/projects");
+      router.push("/dashboard");
       router.refresh();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "注册失败");

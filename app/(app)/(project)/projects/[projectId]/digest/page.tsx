@@ -2,10 +2,10 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { formatDateTime } from "@/lib/date-time";
 import { formatShanghaiDate } from "@/lib/shanghai-time";
-import { ProjectMonitoringHistory } from "@/components/projects/project-monitoring-history";
 import { MetricCard, Surface } from "@/components/projects/project-workspace-shell";
 import { db } from "@/server/db";
 import { getProjectMonitoringHistory } from "@/server/services/project-monitoring-history";
+import { DataProvenance } from "@/components/projects/data-provenance";
 
 function statusLabel(status: string) {
   if (status === "SUCCESS") return "Delivered";
@@ -38,6 +38,12 @@ export default async function ProjectDigestPage({ params }: { params: { projectI
   });
   if (!project) return null;
 
+  const latestCapture = await db.dataCapture.findFirst({
+    where: { projectId: project.id, status: "SUCCESS" },
+    orderBy: { capturedAt: "desc" },
+    select: { sourceKind: true, provider: true, apiName: true, capturedAt: true }
+  });
+
   const history = await getProjectMonitoringHistory(project.id, {
     pollJobLimit: 10,
     deliveryLimit: 18,
@@ -53,12 +59,12 @@ export default async function ProjectDigestPage({ params }: { params: { projectI
     <div className="mx-auto max-w-6xl space-y-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="font-label text-xs uppercase tracking-[0.2em] text-[var(--md-primary)]">Daily archive</p>
+          <p className="font-label text-xs uppercase tracking-[0.2em] text-[var(--md-primary)]">Reports and delivery</p>
           <h1 className="font-headline mt-3 text-3xl font-bold tracking-tight text-[var(--md-on-surface)]">
-            日报 (Daily Digest) Archive
+            报告与通知
           </h1>
           <p className="mt-2 max-w-2xl font-label text-sm text-[var(--md-on-surface-variant)]">
-            Daily summaries of competitor movements, operational metrics, and automated alerts delivered to your team's channels.
+            查看每日监控报告、告警投递与通知渠道健康状态。
           </p>
         </div>
         <Link
@@ -75,6 +81,12 @@ export default async function ProjectDigestPage({ params }: { params: { projectI
         <MetricCard label="Failed" ownValue={history.dailyDigests.filter((d) => d.status === "FAILED").length} />
         <MetricCard label="Delivery health" ownValue={`${successRate}%`} />
       </div>
+
+      <Surface>
+        <h2 className="font-headline text-lg font-semibold text-[var(--md-on-surface)]">报告数据来源</h2>
+        <p className="mt-1 font-label text-sm text-[var(--md-on-surface-variant)]">日报基于本项目已保存的监控事实生成；不会把模拟采集当作实时 Amazon 数据。</p>
+        <DataProvenance capture={latestCapture} />
+      </Surface>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <div className="space-y-4 xl:col-span-2">
@@ -95,6 +107,7 @@ export default async function ProjectDigestPage({ params }: { params: { projectI
                 </span>
               </div>
               {digest.errorMessage ? <p className="mt-3 font-label text-sm text-[var(--md-error)]">{digest.errorMessage}</p> : null}
+              <pre className="mt-4 whitespace-pre-wrap rounded-lg bg-[var(--md-surface-container-lowest)] p-4 font-label text-sm leading-6 text-[var(--md-on-surface-variant)]">{digest.summary}</pre>
             </div>
           ))}
           {!history.dailyDigests.length ? (
@@ -136,13 +149,6 @@ export default async function ProjectDigestPage({ params }: { params: { projectI
         </div>
       </div>
 
-      <ProjectMonitoringHistory
-        projectId={project.id}
-        pollJobs={history.pollJobs}
-        deliveries={history.webhookDeliveries}
-        suppressions={history.suppressions}
-        dailyDigests={history.dailyDigests}
-      />
     </div>
   );
 }

@@ -2,11 +2,7 @@ import { TopBar } from './top-bar';
 import { Sidebar } from './sidebar';
 
 type AppShellProps = {
-  sidebarItems: Array<{
-    icon: React.ReactNode;
-    label: string;
-    href: string;
-  }>;
+  sidebarItems: React.ComponentProps<typeof Sidebar>["items"];
   homeHref?: string;
   breadcrumb?: string;
   helpHref?: string;

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db } from "@/server/db";
+import { createApiErrorResponse } from "@/server/services/billing/api-error-response";
 import { syncTrackedAsin } from "@/server/services/sync-tracked-asin";
-
 export async function POST(
   _request: Request,
   { params }: { params: { projectId: string; asinId: string } }
@@ -33,15 +33,9 @@ export async function POST(
     const result = await syncTrackedAsin(trackedAsin.id);
     return NextResponse.json({
       ok: true,
-      alertCount: result.alerts.length,
       snapshotCapturedAt: result.snapshot.capturedAt
     });
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Manual sync failed"
-      },
-      { status: 400 }
-    );
+    return createApiErrorResponse(error, "手动刷新失败，请稍后重试。");
   }
 }

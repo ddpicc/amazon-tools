@@ -3,8 +3,10 @@ import { TrackedAsinRole } from "@prisma/client";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { db } from "@/server/db";
-import { ensureAsinMonitoringSubscription } from "@/server/services/monitoring-subscriptions";
-
+import { createApiErrorResponse } from "@/server/services/billing/api-error-response";
+import { assertCanUpsertTrackedAsins } from "@/server/services/entitlements";
+import { formatOperationalError } from "@/server/services/failure-classification";
+import { syncTrackedAsin } from "@/server/services/sync-tracked-asin";
 const trackedAsinRoleSchema = z.nativeEnum(TrackedAsinRole);
 
 const addAsinSchema = z.object({
@@ -68,40 +70,38 @@ export async function POST(
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const created = "asins" in parsed.data
-    ? await Promise.all(
-        parsed.data.asins.map((asin) =>
-          db.trackedAsin.upsert({
-            where: {
-              projectId_asin: {
-                projectId: project.id,
-                asin
-              }
-            },
-            create: {
-              projectId: project.id,
-              asin,
-              marketplace: project.marketplace,
-              role: parsed.data.role
-            },
-            update: {
-              status: "ACTIVE",
-              role: parsed.data.role
-            }
-          })
-        )
-      )
-    : [
-        await db.trackedAsin.upsert({
+  const inputAsins = "asins" in parsed.data ? parsed.data.asins : [parsed.data.asin];
+
+  try {
+    const { normalizedAsins } = await assertCanUpsertTrackedAsins({
+      userId: session.user.id,
+      projectId: project.id,
+      asins: inputAsins,
+      role: parsed.data.role
+    });
+
+    const existingActiveItems = await db.trackedAsin.findMany({
+      where: {
+        projectId: project.id,
+        asin: { in: normalizedAsins },
+        status: "ACTIVE"
+      },
+      select: { id: true }
+    });
+    const existingActiveIds = new Set(existingActiveItems.map((item) => item.id));
+
+    const created = await Promise.all(
+      normalizedAsins.map((asin) =>
+        db.trackedAsin.upsert({
           where: {
             projectId_asin: {
               projectId: project.id,
-              asin: parsed.data.asin
+              asin
             }
           },
           create: {
             projectId: project.id,
-            asin: parsed.data.asin,
+            asin,
             marketplace: project.marketplace,
             role: parsed.data.role
           },
@@ -110,9 +110,43 @@ export async function POST(
             role: parsed.data.role
           }
         })
-      ];
+      )
+    );
 
-  await Promise.all(created.map((item) => ensureAsinMonitoringSubscription(item.id).catch(() => null)));
+    const initialCollections = [] as Array<{
+      trackedAsinId: string;
+      status: "SUCCESS" | "FAILED" | "SKIPPED";
+      error?: string;
+    }>;
 
-  return NextResponse.json({ items: created }, { status: 201 });
+    for (const item of created) {
+      if (existingActiveIds.has(item.id)) {
+        initialCollections.push({ trackedAsinId: item.id, status: "SKIPPED" });
+        continue;
+      }
+
+      try {
+        await syncTrackedAsin(item.id, {
+          skipManualLimit: true,
+          jobType: "initial_sync"
+        });
+        initialCollections.push({ trackedAsinId: item.id, status: "SUCCESS" });
+      } catch (error) {
+        initialCollections.push({
+          trackedAsinId: item.id,
+          status: "FAILED",
+          error: formatOperationalError(error, "首次采集失败，系统会在下次定时任务中重试。")
+        });
+      }
+    }
+
+    const items = await db.trackedAsin.findMany({
+      where: { id: { in: created.map((item) => item.id) } },
+      orderBy: [{ role: "asc" }, { updatedAt: "desc" }]
+    });
+
+    return NextResponse.json({ items, initialCollections }, { status: 201 });
+  } catch (error) {
+    return createApiErrorResponse(error, "添加 ASIN 失败，请检查输入内容后重试。");
+  }
 }

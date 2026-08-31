@@ -26,6 +26,7 @@ export default async function ProjectAsinsPage({ params }: { params: { projectId
           brand: true,
           status: true,
           lastSuccessAt: true,
+          consecutiveFailures: true,
           category: true
         }
       }
@@ -38,18 +39,18 @@ export default async function ProjectAsinsPage({ params }: { params: { projectId
   return (
     <div className="mx-auto max-w-6xl space-y-8">
       <div>
-        <p className="font-label text-xs uppercase tracking-[0.2em] text-[var(--md-primary)]">Inventory management</p>
-        <h1 className="font-headline mt-3 text-3xl font-bold tracking-tight text-[var(--md-on-surface)]">ASIN Management</h1>
+        <p className="font-label text-xs uppercase tracking-[0.2em] text-[var(--md-primary)]">Monitoring setup</p>
+        <h1 className="font-headline mt-3 text-3xl font-bold tracking-tight text-[var(--md-on-surface)]">监控对象</h1>
         <p className="mt-2 max-w-2xl font-label text-sm text-[var(--md-on-surface-variant)]">
-          Manage subscribed ASINs for your own products and competitor benchmarks. Each subscribed ASIN is collected once per day.
+          在一个项目中维护自有商品与竞品。所有启用的 ASIN 每天自动采集一次，用于生成监控、对比与报告。
         </p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-        <MetricCard label="Total Tracked" ownLabel="" ownValue={stats.trackedAsinCount} footer={<span className="font-label text-xs text-[var(--md-on-surface-variant)]">All monitored listings</span>} />
-        <MetricCard label="Own Portfolio" ownLabel="" ownValue={stats.ownAsinCount} footer={<span className="font-label text-xs text-[var(--md-on-surface-variant)]">Active ASINs</span>} />
-        <MetricCard label="Competitors" ownLabel="" ownValue={stats.competitorAsinCount} footer={<span className="font-label text-xs text-[var(--md-on-surface-variant)]">Across markets</span>} />
-        <MetricCard label="Sync Health" ownLabel="" ownValue={stats.lastSyncAt ? "Active" : "Pending"} footer={<span className="font-label text-xs text-emerald-400">{stats.lastSyncAt ? `Last sync: ${new Date(stats.lastSyncAt).toLocaleString("zh-CN")}` : "No sync yet"}</span>} />
+        <MetricCard label="全部监控" ownLabel="" ownValue={stats.trackedAsinCount} footer={<span className="font-label text-xs text-[var(--md-on-surface-variant)]">所有已订阅商品</span>} />
+        <MetricCard label="自有商品" ownLabel="" ownValue={stats.ownAsinCount} footer={<span className="font-label text-xs text-[var(--md-on-surface-variant)]">运营对象</span>} />
+        <MetricCard label="竞品" ownLabel="" ownValue={stats.competitorAsinCount} footer={<span className="font-label text-xs text-[var(--md-on-surface-variant)]">对照对象</span>} />
+        <MetricCard label="采集状态" ownLabel="" ownValue={stats.lastSyncAt ? "正常" : "等待首次采集"} footer={<span className="font-label text-xs text-emerald-400">{stats.lastSyncAt ? `最近采集：${new Date(stats.lastSyncAt).toLocaleString("zh-CN")}` : "尚未采集"}</span>} />
       </div>
 
       <AddAsinForm projectId={project.id} />

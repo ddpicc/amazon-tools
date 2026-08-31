@@ -37,7 +37,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const session = await auth();
   if (!session?.user?.id) return null;
   if (session.user.role !== "ADMIN") {
-    redirect("/projects");
+    redirect("/dashboard");
   }
 
   const unreadNotificationCount = await db.inboxNotification.count({

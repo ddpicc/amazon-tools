@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { getShanghaiDateKey } from "@/lib/shanghai-time";
 
 type AsinFiltersProps = {
   projectId: string;
@@ -14,18 +15,29 @@ type AsinFiltersProps = {
     brand: string | null;
     status: string;
     lastSuccessAt: Date | null;
+    consecutiveFailures: number;
     category: string | null;
   }>;
 };
 
 function roleLabel(role: string) {
-  return role === "OWN" ? "Own" : "Competitor";
+  return role === "OWN" ? "自有商品" : "竞品";
 }
 
-function statusStyle(status: string) {
-  if (status === "ACTIVE") return "bg-emerald-500/10 text-emerald-400";
-  if (status === "PAUSED") return "bg-amber-500/10 text-amber-300";
-  return "bg-[var(--md-surface-container)] text-[var(--md-on-surface-variant)]";
+function monitoringStatus(item: AsinFiltersProps["items"][number]) {
+  if (item.status === "PAUSED") {
+    return { label: "已暂停", className: "bg-amber-500/10 text-amber-300" };
+  }
+
+  if (!item.lastSuccessAt && item.consecutiveFailures > 0) {
+    return { label: "首次采集失败", className: "bg-[var(--md-error)]/10 text-[var(--md-error)]" };
+  }
+
+  if (!item.lastSuccessAt) {
+    return { label: "等待首次采集", className: "bg-sky-500/10 text-sky-300" };
+  }
+
+  return { label: "监控中", className: "bg-emerald-500/10 text-emerald-400" };
 }
 
 function isSyncedToday(lastSuccessAt: Date | string | null) {
@@ -33,10 +45,7 @@ function isSyncedToday(lastSuccessAt: Date | string | null) {
     return false;
   }
 
-  const syncedAt = new Date(lastSuccessAt);
-  const now = new Date();
-
-  return syncedAt.toDateString() === now.toDateString();
+  return getShanghaiDateKey(new Date(lastSuccessAt)) === getShanghaiDateKey(new Date());
 }
 
 export function AsinTableWithFilters({ projectId, items }: AsinFiltersProps) {
@@ -44,6 +53,7 @@ export function AsinTableWithFilters({ projectId, items }: AsinFiltersProps) {
   const [roleFilter, setRoleFilter] = useState("ALL");
   const [sortBy, setSortBy] = useState("recent");
   const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   async function runManualSync(asinId: string) {
@@ -64,6 +74,23 @@ export function AsinTableWithFilters({ projectId, items }: AsinFiltersProps) {
 
     setMessage("手动同步已完成");
     router.refresh();
+  }
+
+  async function updateAsin(asinId: string, body: Record<string, string>) {
+    setUpdatingId(asinId); setMessage(null);
+    const response = await fetch(`/api/projects/${projectId}/asins/${asinId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await response.json().catch(() => null); setUpdatingId(null);
+    if (!response.ok) return setMessage(data?.error ?? "更新监控对象失败");
+    setMessage("监控对象已更新"); router.refresh();
+  }
+
+  async function removeAsin(asinId: string, asin: string) {
+    if (!window.confirm(`删除 ${asin} 会解除监控订阅并删除其本地历史快照，确认继续吗？`)) return;
+    setUpdatingId(asinId); setMessage(null);
+    const response = await fetch(`/api/projects/${projectId}/asins/${asinId}`, { method: "DELETE" });
+    const data = await response.json().catch(() => null); setUpdatingId(null);
+    if (!response.ok) return setMessage(data?.error ?? "删除监控对象失败");
+    setMessage("监控对象已删除"); router.refresh();
   }
 
   const filtered = useMemo(() => {
@@ -92,7 +119,7 @@ export function AsinTableWithFilters({ projectId, items }: AsinFiltersProps) {
               roleFilter === "ALL" ? "border-[var(--md-primary)] text-[var(--md-primary)]" : "border-transparent text-[var(--md-on-surface-variant)] hover:text-[var(--md-on-surface)]"
             }`}
           >
-            All ({items.length})
+            全部 ({items.length})
           </button>
           <button
             onClick={() => setRoleFilter("OWN")}
@@ -100,7 +127,7 @@ export function AsinTableWithFilters({ projectId, items }: AsinFiltersProps) {
               roleFilter === "OWN" ? "border-[var(--md-primary)] text-[var(--md-primary)]" : "border-transparent text-[var(--md-on-surface-variant)] hover:text-[var(--md-on-surface)]"
             }`}
           >
-            Own ASINs (本品)
+            自有商品
           </button>
           <button
             onClick={() => setRoleFilter("COMPETITOR")}
@@ -108,11 +135,11 @@ export function AsinTableWithFilters({ projectId, items }: AsinFiltersProps) {
               roleFilter === "COMPETITOR" ? "border-[var(--md-primary)] text-[var(--md-primary)]" : "border-transparent text-[var(--md-on-surface-variant)] hover:text-[var(--md-on-surface)]"
             }`}
           >
-            Competitor ASINs (竞品)
+            竞品
           </button>
         </div>
         <div className="flex items-center gap-3 px-4">
-          <span className="font-label text-xs text-[var(--md-on-surface-variant)]">Sort:</span>
+          <span className="font-label text-xs text-[var(--md-on-surface-variant)]">排序：</span>
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}
@@ -129,13 +156,13 @@ export function AsinTableWithFilters({ projectId, items }: AsinFiltersProps) {
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="border-b border-[var(--md-outline-variant)] bg-[var(--md-surface-container-lowest)]/30 font-label text-xs uppercase tracking-wider text-[var(--md-on-surface-variant)]">
-              <th className="p-4 font-semibold">ASIN / Product</th>
-              <th className="p-4 font-semibold">Market</th>
-              <th className="p-4 font-semibold">Role</th>
-              <th className="p-4 font-semibold">Category</th>
-              <th className="p-4 font-semibold">Last sync</th>
-              <th className="p-4 font-semibold">Status</th>
-              <th className="p-4 font-semibold text-right">Action</th>
+              <th className="p-4 font-semibold">ASIN / 商品</th>
+              <th className="p-4 font-semibold">站点</th>
+              <th className="p-4 font-semibold">角色</th>
+              <th className="p-4 font-semibold">类目</th>
+              <th className="p-4 font-semibold">最近成功采集</th>
+              <th className="p-4 font-semibold">监控状态</th>
+              <th className="p-4 font-semibold text-right">操作</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--md-outline-variant)]/50 font-label text-sm text-[var(--md-on-surface)]">
@@ -147,7 +174,8 @@ export function AsinTableWithFilters({ projectId, items }: AsinFiltersProps) {
               </tr>
             ) : null}
             {filtered.map((item) => {
-              const canManualSync = !isSyncedToday(item.lastSuccessAt);
+              const canManualSync = item.status !== "PAUSED" && !isSyncedToday(item.lastSuccessAt);
+              const state = monitoringStatus(item);
 
               return (
                 <tr key={item.id} className="transition-colors hover:bg-[var(--md-surface-container-high)]">
@@ -171,12 +199,15 @@ export function AsinTableWithFilters({ projectId, items }: AsinFiltersProps) {
                     {item.lastSuccessAt ? new Date(item.lastSuccessAt).toLocaleString("zh-CN") : "未成功同步"}
                   </td>
                   <td className="p-4">
-                    <div className="flex items-center gap-1.5 text-xs">
-                      <div className={`h-2 w-2 rounded-full ${statusStyle(item.status)}`} />
-                      <span className="text-[var(--md-on-surface)]">{item.status}</span>
-                    </div>
+                    <span className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ${state.className}`}>
+                      {state.label}
+                    </span>
                   </td>
-                  <td className="p-4 text-right">
+                  <td className="p-4 text-right"><div className="flex flex-wrap justify-end gap-2">
+                    <select value={item.role} disabled={updatingId === item.id} onChange={(event) => updateAsin(item.id, { role: event.target.value })} className="rounded-lg border border-[var(--md-outline-variant)] bg-[var(--md-surface)] px-2 py-1.5 text-xs">
+                      <option value="OWN">自有</option><option value="COMPETITOR">竞品</option>
+                    </select>
+                    <button onClick={() => updateAsin(item.id, { status: item.status === "PAUSED" ? "ACTIVE" : "PAUSED" })} disabled={updatingId === item.id} className="rounded-lg border border-[var(--md-outline-variant)] px-2 py-1.5 text-xs disabled:opacity-50">{item.status === "PAUSED" ? "恢复" : "暂停"}</button>
                     {canManualSync ? (
                       <button
                         onClick={() => runManualSync(item.id)}
@@ -186,7 +217,8 @@ export function AsinTableWithFilters({ projectId, items }: AsinFiltersProps) {
                         {syncingId === item.id ? "同步中..." : "手动同步"}
                       </button>
                     ) : null}
-                  </td>
+                    <button onClick={() => removeAsin(item.id, item.asin)} disabled={updatingId === item.id} className="rounded-lg border border-[var(--md-error)]/40 px-2 py-1.5 text-xs text-[var(--md-error)] disabled:opacity-50">删除</button>
+                  </div></td>
                 </tr>
               );
             })}

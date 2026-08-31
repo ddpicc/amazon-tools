@@ -1,0 +1,87 @@
+{
+  "requestedAt": "2026-08-31T06:46:14.429Z",
+  "request": {
+    "apiName": "ASINSubscriptionCollection",
+    "marketplace": "AU",
+    "domain": 12,
+    "asin": "B0FCSLZ7DR"
+  },
+  "response": {
+    "httpStatus": 200,
+    "ok": true,
+    "rawPayload": {
+      "RequestLeft": 0,
+      "RequestConsumed": 0,
+      "Code": 0,
+      "Message": "Success",
+      "Data": [
+        {
+          "Title": "2 PCS Stackable Hat Storage for Baseball Caps, Cap Holder with Quick Access with Clear Window, Cardboard Support,24 Hat Organizer for Closet,Travel or Car Trunk Storage,Grey",
+          "Photo": [
+            "https://m.media-amazon.com/images/I/71QiQgmvPSL.jpg",
+            "https://m.media-amazon.com/images/I/817v23dwzsL.jpg",
+            "https://m.media-amazon.com/images/I/71VoUvBHRtL.jpg",
+            "https://m.media-amazon.com/images/I/81TNXFO2ZHL.jpg",
+            "https://m.media-amazon.com/images/I/71QAmEhiZ1L.jpg",
+            "https://m.media-amazon.com/images/I/81XDttjkqmL.jpg"
+          ],
+          "EBCPhoto": [
+            "https://m.media-amazon.com/images/S/aplus-media-library-service-media/0ff5553e-7d48-4e96-aab0-05d8e76533ed.__CR0,5,1586,981_PT0_SX970_V1___.png",
+            "https://m.media-amazon.com/images/S/aplus-media-library-service-media/a7479117-c9c7-41a0-a7e3-f327aef038f9.__CR0,0,1600,1600_PT0_SX300_V1___.jpg",
+            "https://m.media-amazon.com/images/S/aplus-media-library-service-media/8c35319f-baf3-4803-b648-888c26f3d807.__CR0,0,1600,1600_PT0_SX300_V1___.jpg",
+            "https://m.media-amazon.com/images/S/aplus-media-library-service-media/bcc4e19f-d115-4253-8ebf-11c2fa67cf0a.__CR0,0,1600,1600_PT0_SX300_V1___.jpg",
+            "https://m.media-amazon.com/images/S/aplus-media-library-service-media/2094580f-736e-4d83-a470-9a700bcfd9dd.__CR0,0,1698,1698_PT0_SX300_V1___.jpg",
+            "https://m.media-amazon.com/images/S/aplus-media-library-service-media/7d5d2c71-ff65-4cbf-ada2-be6f67fb406d.__CR0,5,1586,981_PT0_SX970_V1___.png",
+            "https://m.media-amazon.com/images/S/aplus-media-library-service-media/b2fefab9-4b73-453f-bfe8-66d9a0011bd3.__CR0,5,1586,981_PT0_SX970_V1___.png"
+          ],
+          "StoreName": "Longfng",
+          "ListingSaleCount": 8,
+          "ListingSaleCountOfDaily": [
+            "2026-08-30",
+            0
+          ],
+          "AsinSalesCount": 0,
+          "Asin": "B0FCSLZ7DR",
+          "ParentAsin": "B0FCSLZ7DR",
+          "Price": 2667,
+          "ListPrice": 2974,
+          "Coupon": 0,
+          "SalesPrice": 2667,
+          "Brand": "Longfng",
+          "Description": "【Holds up to 24 Hats】: Size of baseball cap storage: 17“L x 8.7“W x 6.7“H, each well-designed hat organizer can efficiently accommodate up to 12 hats, 2 pcs hat cases can hold 24 hats in total, eliminating the frustration of messy hat piles.<br>【Stackable Design & Space Saving】: Each hat organizer for baseball caps comes with a cardboard base that ensures stacking, not easy to tip or slide. Maximizing the storage room by stackable design, do double duty on storage and saving-space.<br>【Easy to Access】: Equipped with a two-way metal zipper, open and close smoothly, complemented by a clear PVC design, the hat storage allows you to quickly find the hat you want and making it convenient for you to organize your hat collection.<br>【Keep the Cleanliness of Hats】: Cap organizer can effectively isolate dirt and other impurities, keep the surface of hats from being contaminated, maintain the cleanliness of hats. Hat container fit for storage and display men‘s & women‘s baseball caps, visors, trucker hats, beanies, snapback hats, fitted hats etc.<br>【Versatile Uses】: Hat organizer box can also convenient to store your miscellaneous items such as clothing, bedding, books, toys, scarves and more, side name card window for easy identification, can be stored in the bedroom, living room, wardrobe or car trunk.<br>",
+          "BuyboxSeller": "Langfeng-au",
+          "BuyboxSellerId": "A3GFK2M19K7MD4",
+          "IsFBA": true,
+          "ShipCost": 0,
+          "OnlineDate": "2025-06-11",
+          "OnlineDays": 446,
+          "RatingsCount": 1,
+          "Category": [
+            "Home",
+            "home"
+          ],
+          "BsrCategory": [
+            [
+              "Clothing & Closet Storage",
+              "4975279051",
+              "1498"
+            ]
+          ],
+          "Rank": 74035,
+          "Ratings": 5,
+          "VariationASINCount": 0,
+          "SellerCount": 1,
+          "HasVideo": true,
+          "APlus": true,
+          "HasBrandStore": false,
+          "Size": [
+            "34.2,27.3,7.4"
+          ],
+          "Weight": 610,
+          "ExtraSavings": [],
+          "Property": "[\"Brand\",\"Longfng\",\"Colour\",\"Grey\",\"Material\",\"Fabric\",\"Special feature\",\"Stackable, Transparent\",\"Style\",\"Contemporary\"]"
+        }
+      ]
+    }
+  }
+}

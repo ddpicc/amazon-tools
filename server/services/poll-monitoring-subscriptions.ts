@@ -1,6 +1,7 @@
 import { db } from "@/server/db";
 import { formatOperationalError } from "@/server/services/failure-classification";
 import { syncTrackedAsin } from "@/server/services/sync-tracked-asin";
+import { syncTrackedAsinLowStarReviews } from "@/server/services/sync-product-reviews";
 
 export async function pollProjectMonitoringSubscriptions(projectId: string) {
   const project = await db.project.findUnique({
@@ -37,6 +38,9 @@ export async function pollProjectMonitoringSubscriptions(projectId: string) {
         jobType: "monitoring_poll"
       });
       asinResults.push(result);
+      if (trackedAsin.role === "OWN") {
+        await syncTrackedAsinLowStarReviews(trackedAsin.id).catch(() => null);
+      }
     }
 
     await db.syncJob.update({

@@ -12,7 +12,7 @@ const updateProjectSchema = z.object({
   dailyDigestSendTime: z
     .string()
     .regex(/^\d{2}:\d{2}$/)
-    .optional()
+    .optional(),
 });
 
 export async function GET(
@@ -129,8 +129,12 @@ export async function PATCH(
         ? {
             settings: {
               upsert: {
-                create: dailyDigestTimeData,
-                update: dailyDigestTimeData
+                create: {
+                  ...(dailyDigestTimeData ?? {}),
+                },
+                update: {
+                  ...(dailyDigestTimeData ?? {}),
+                }
               }
             }
           }

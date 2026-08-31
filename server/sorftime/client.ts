@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
 import { getCurrencyDivisor } from "@/server/sorftime/marketplaces";
 
-type SorftimeProductObject = {
+export type SorftimeProductObject = {
   ASIN?: string;
   Asin?: string;
   Title?: string;
@@ -22,7 +22,9 @@ type SorftimeProductObject = {
   BuyboxSeller?: string;
   BuyboxSellerId?: string;
   IsFBA?: boolean;
+  FbaFee?: number | null;
   ShipCost?: number | null;
+  DealType?: string | null;
   OnlineDate?: string;
   OnlineDays?: number | null;
   RatingsCount?: number | null;
@@ -53,7 +55,9 @@ export type SorftimeProductSnapshot = {
   buyboxSeller: string;
   buyboxSellerId: string;
   isFBA: boolean | null;
+  fbaFee: number | null;
   shipCost: number | null;
+  dealType: string | null;
   onlineDate: Date | null;
   onlineDays: number | null;
   category: string;
@@ -152,7 +156,9 @@ export function mapSorftimeProductObjectToSnapshot(
     buyboxSeller: data.BuyboxSeller || "",
     buyboxSellerId: data.BuyboxSellerId || "",
     isFBA: data.IsFBA ?? null,
+    fbaFee: data.FbaFee ?? null,
     shipCost: data.ShipCost ?? null,
+    dealType: data.DealType ?? null,
     onlineDate: normalizeDate(data.OnlineDate),
     onlineDays: data.OnlineDays ?? null,
     category: normalizeCategory(data.Category, data.ProductType),

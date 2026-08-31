@@ -15,6 +15,14 @@ type ProjectSettingsPanelProps = {
   marketplace: string;
   dailyDigestSendHour: number;
   dailyDigestSendMinute: number;
+  planName: string;
+  projectCount: number;
+  maxProjects: number;
+  activeTrackedAsinCount: number;
+  maxTrackedAsins: number;
+  maxManualRefreshesPerAsinPerDay: number;
+  planRecentlyChanged: boolean;
+  planLastChangedAtLabel: string | null;
   channels: Array<{
     type: "INBOX" | "FEISHU" | "WECOM" | "EMAIL";
     enabled: boolean;
@@ -120,6 +128,14 @@ export function ProjectSettingsPanel({
   marketplace,
   dailyDigestSendHour,
   dailyDigestSendMinute,
+  planName,
+  projectCount,
+  maxProjects,
+  activeTrackedAsinCount,
+  maxTrackedAsins,
+  maxManualRefreshesPerAsinPerDay,
+  planRecentlyChanged,
+  planLastChangedAtLabel,
   channels
 }: ProjectSettingsPanelProps) {
   const router = useRouter();
@@ -251,6 +267,41 @@ export function ProjectSettingsPanel({
   return (
     <div className="space-y-10">
       <SettingSection
+        title="套餐与容量"
+        description="查看当前套餐、资源使用情况，以及手动刷新规则。"
+      >
+        {planRecentlyChanged ? (
+          <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-5 py-4 text-sm text-emerald-100">
+            <p className="font-semibold text-emerald-200">套餐权益已更新并立即生效</p>
+            <p className="mt-2 text-emerald-100/90">
+              {planLastChangedAtLabel
+                ? `最近一次套餐变更时间：${planLastChangedAtLabel}。当前看到的项目数、ASIN 上限与手动刷新规则说明都已按最新套餐刷新。`
+                : "当前看到的项目数、ASIN 上限与手动刷新规则说明都已按最新套餐刷新。"}
+            </p>
+          </div>
+        ) : null}
+        <SettingCard>
+          <SettingRow label="当前套餐" description="当前账号生效中的订阅套餐。">
+            <div className="space-y-2">
+              <p className="font-headline text-lg font-semibold text-[var(--md-on-surface)]">{planName}</p>
+              <p className="font-label text-sm text-[var(--md-on-surface-variant)]">
+                项目 {projectCount} / {maxProjects} · 活跃 ASIN {activeTrackedAsinCount} / {maxTrackedAsins}
+              </p>
+            </div>
+          </SettingRow>
+          <SettingRow
+            label="手动刷新规则"
+            description="这个规则不区分套餐，避免同一天内重复抓取没有变化的数据。"
+            bordered={false}
+          >
+            <div className="rounded-xl border border-[var(--md-outline-variant)] bg-[var(--md-surface-dim)] px-4 py-3 font-label text-sm text-[var(--md-on-surface)]">
+              每个 ASIN 每天最多手动刷新 {maxManualRefreshesPerAsinPerDay} 次。
+            </div>
+          </SettingRow>
+        </SettingCard>
+      </SettingSection>
+
+      <SettingSection
         title="基础设置"
         description="查看项目基本信息，并管理通知与生命周期。"
       >
@@ -284,7 +335,7 @@ export function ProjectSettingsPanel({
 
       <SettingSection
         title="通知渠道"
-        description="配置日报和告警要发送到哪里。"
+        description="配置每日变化报告要发送到哪里。"
         action={
           <Link
             href="/help/webhooks"
@@ -298,7 +349,7 @@ export function ProjectSettingsPanel({
         }
       >
         <SettingCard>
-          <SettingRow label="飞书" description="将日报和告警发送到飞书机器人。">
+          <SettingRow label="飞书" description="将每日变化报告发送到飞书机器人。">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <p className="font-label text-sm text-[var(--md-on-surface-variant)]">Webhook 投递</p>
@@ -320,7 +371,7 @@ export function ProjectSettingsPanel({
             </div>
           </SettingRow>
 
-          <SettingRow label="企业微信" description="将日报和告警发送到企业微信机器人。">
+          <SettingRow label="企业微信" description="将每日变化报告发送到企业微信机器人。">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <p className="font-label text-sm text-[var(--md-on-surface-variant)]">Webhook 投递</p>

@@ -142,7 +142,7 @@ function pickCategory(message: string): FailureClassification {
     return { category: "NOT_FOUND", label: "对象不存在", detail: buildDetail(meta) };
   }
 
-  if (text.includes("manual sync limit reached")) {
+  if (text.includes("manual sync limit reached") || text.includes("每天最多手动刷新")) {
     return { category: "MANUAL_LIMIT", label: "手动额度限制", detail: buildDetail(meta) };
   }
 

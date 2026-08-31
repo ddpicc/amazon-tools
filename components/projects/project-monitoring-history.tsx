@@ -47,6 +47,7 @@ type ProjectMonitoringHistoryProps = {
     status: string;
     errorMessage: string | null;
     sentAt: string | Date | null;
+    summary: string;
   }>;
 };
 

@@ -1,9 +1,9 @@
 import { auth } from '@/auth';
+import Link from 'next/link';
 import { formatDateTime } from '@/lib/date-time';
-import { AlertList } from '@/components/alerts/alert-list';
+import { getShanghaiStartOfDay } from '@/lib/shanghai-time';
 import {
   MetricCard,
-  SectionHeading,
   Surface
 } from '@/components/projects/project-workspace-shell';
 import { ApiUsagePanel } from '@/components/usage/api-usage-panel';
@@ -26,15 +26,19 @@ export default async function ProjectDetailPage({
 
   const project = await db.project.findFirst({
     where: { id: params.projectId, userId: session.user.id },
-    include: {
-      alerts: { include: { trackedAsin: true }, orderBy: { createdAt: 'desc' }, take: 6 }
-    }
+    select: { id: true, name: true, marketplace: true }
   });
   if (!project) return null;
 
   const [overview, apiUsage] = await Promise.all([
     getProjectOverview(project.id),
     isAdmin ? getProjectApiUsage(project.id) : Promise.resolve(null)
+  ]);
+  const todayStart = getShanghaiStartOfDay(new Date());
+  const [failedAsins, newLowStarReviews, latestDigest] = await Promise.all([
+    db.trackedAsin.findMany({ where: { projectId: project.id, consecutiveFailures: { gt: 0 } }, orderBy: { consecutiveFailures: "desc" }, take: 5, select: { asin: true, consecutiveFailures: true } }),
+    db.productReview.findMany({ where: { trackedAsin: { projectId: project.id, role: "OWN" }, rating: { lte: 3 }, firstSeenAt: { gte: todayStart } }, orderBy: { firstSeenAt: "desc" }, take: 5, select: { rating: true, trackedAsin: { select: { asin: true } } } }),
+    db.dailyDigestRun.findFirst({ where: { projectId: project.id }, orderBy: { digestDate: "desc" }, select: { digestDate: true, summary: true } })
   ]);
   const digestCardValue =
     overview.todayDigestSentAt
@@ -54,7 +58,30 @@ export default async function ProjectDetailPage({
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
-      {/* Executive Summary Banner */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div>
+          <p className="font-label text-xs uppercase tracking-[0.2em] text-[var(--md-primary)]">Daily operations</p>
+          <h1 className="font-headline mt-3 text-3xl font-bold tracking-tight text-[var(--md-on-surface)]">今日运营简报</h1>
+          <p className="mt-2 max-w-2xl font-label text-sm text-[var(--md-on-surface-variant)]">
+            汇总自有 Listing、竞品和评论指标的每日变化，方便每天统一复盘。
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <Link
+            href={`/projects/${project.id}/asins`}
+            className="rounded-lg border border-[var(--md-outline-variant)] px-4 py-2 font-label text-sm font-semibold text-[var(--md-on-surface)] transition-colors hover:border-[var(--md-primary)] hover:text-[var(--md-primary)]"
+          >
+            管理商品对象
+          </Link>
+          <Link
+            href={`/projects/${project.id}/trends`}
+            className="rounded-lg bg-[var(--md-primary)] px-4 py-2 font-label text-sm font-semibold text-[var(--md-on-primary)] transition-colors hover:bg-[var(--md-primary-dim)]"
+          >
+            查看监控动态
+          </Link>
+        </div>
+      </div>
+
       <Surface>
         <div className="flex items-start gap-4">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--md-primary)]/10">
@@ -64,10 +91,10 @@ export default async function ProjectDetailPage({
           </div>
           <div>
             <h2 className="font-headline text-lg font-semibold text-[var(--md-on-surface)]">
-              Project Overview
+              今日状态
             </h2>
             <p className="mt-2 max-w-3xl font-label text-sm leading-relaxed text-[var(--md-on-surface-variant)]">
-              这里汇总项目的核心监测状态。对比分析看 Compare，单个 ASIN 快照看 Snapshots。
+              数据按日自动采集，并在日报中逐项列出与上一份快照相比发生的变化，不按阈值筛选或即时打扰。
             </p>
           </div>
         </div>
@@ -75,35 +102,29 @@ export default async function ProjectDetailPage({
 
       {/* Metrics Grid */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <MetricCard label="Monitored Days" ownLabel="" ownValue={overview.monitoredDays} footer={<span className="font-label text-xs text-[var(--md-on-surface-variant)]">Started {new Date(overview.monitoringStartedAt).toLocaleDateString('zh-CN')}</span>} />
+        <MetricCard label="监控对象" ownLabel="" ownValue={overview.trackedAsinCount} footer={<span className="font-label text-xs text-[var(--md-on-surface-variant)]">{overview.ownAsinCount} 个自有商品 · {overview.competitorAsinCount} 个竞品</span>} />
         <MetricCard
-          label="Tracked ASINs"
+          label="自有商品"
           ownLabel=""
-          ownValue={overview.trackedAsinCount}
-          footer={<span className="font-label text-xs text-[var(--md-on-surface-variant)]">{overview.ownAsinCount} own / {overview.competitorAsinCount} competitors</span>}
+          ownValue={overview.ownAsinCount}
+          footer={<span className="font-label text-xs text-[var(--md-on-surface-variant)]">项目中的运营对象</span>}
         />
         <MetricCard
-          label="Today's Digest"
+          label="竞品"
+          ownLabel=""
+          ownValue={overview.competitorAsinCount}
+          footer={<span className="font-label text-xs text-[var(--md-on-surface-variant)]">每日汇总竞品变化</span>}
+        />
+        <MetricCard
+          label="今日报告"
           ownLabel=""
           ownValue={digestCardValue}
           footer={<span className="font-label text-xs text-[var(--md-on-surface-variant)]">{digestCardFooter}</span>}
         />
-        <MetricCard
-          label="Latest Snapshot"
-          ownLabel=""
-          ownValue={overview.latestSnapshotAt ? 'Active' : 'Pending'}
-          footer={<span className="font-label text-xs text-[var(--md-on-surface-variant)]">{fmtDateTime(overview.latestSnapshotAt)}</span>}
-        />
       </div>
 
-      <div id="recent-alerts">
-        <Surface>
-          <SectionHeading title="Recent alerts" description={`Today ${overview.todayAlertCount} new alerts`} />
-          <div className="mt-5">
-            <AlertList alerts={project.alerts} />
-          </div>
-        </Surface>
-      </div>
+      <Surface>
+        <div className="flex items-center justify-between gap-4"><div><h2 className="font-headline text-xl font-semibold text-[var(--md-on-surface)]">今日需处理</h2><p className="mt-1 font-label text-sm text-[var(--md-on-surface-variant)]">优先处理采集失败和新发现的低星评论。</p></div><Link href={`/projects/${project.id}/trends`} className="font-label text-sm text-[var(--md-primary)]">查看监控动态</Link></div><div className="mt-5 grid gap-3 md:grid-cols-2">{failedAsins.map((item) => <div key={item.asin} className="rounded-xl border border-[var(--md-error)]/30 p-4 font-label text-sm"><strong>{item.asin}</strong> 已连续采集失败 {item.consecutiveFailures} 次</div>)}{newLowStarReviews.map((review, index) => <Link key={`${review.trackedAsin.asin}-${index}`} href={`/projects/${project.id}/reviews`} className="rounded-xl border border-amber-500/30 p-4 font-label text-sm"><strong>{review.trackedAsin.asin}</strong> 新增 {review.rating} 星评论</Link>)}{!failedAsins.length && !newLowStarReviews.length ? <p className="rounded-xl border border-dashed border-[var(--md-outline-variant)] p-4 font-label text-sm text-[var(--md-on-surface-variant)]">暂无需要立即处理的事项。</p> : null}</div>{latestDigest ? <div className="mt-5 rounded-xl bg-[var(--md-surface-container-low)] p-4"><p className="font-label text-xs text-[var(--md-on-surface-variant)]">最近日报 · {latestDigest.digestDate.toLocaleDateString("zh-CN")}</p><p className="mt-2 line-clamp-3 whitespace-pre-wrap font-label text-sm text-[var(--md-on-surface-variant)]">{latestDigest.summary}</p><Link href={`/projects/${project.id}/digest`} className="mt-3 inline-block font-label text-sm text-[var(--md-primary)]">查看完整日报</Link></div> : null}</Surface>
 
       {isAdmin && apiUsage ? <ApiUsagePanel usage={apiUsage} /> : null}
     </div>

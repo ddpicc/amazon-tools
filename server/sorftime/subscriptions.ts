@@ -34,7 +34,9 @@ type SorftimeProductObject = {
   BuyboxSeller?: string;
   BuyboxSellerId?: string;
   IsFBA?: boolean;
+  FbaFee?: number | null;
   ShipCost?: number | null;
+  DealType?: string | null;
   OnlineDate?: string;
   OnlineDays?: number | null;
   RatingsCount?: number | null;

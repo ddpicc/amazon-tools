@@ -132,6 +132,75 @@ function getSeriesColor(index: number) {
   return SERIES_COLORS[index % SERIES_COLORS.length];
 }
 
+function formatMetricChange(label: string, previous: number | null, current: number | null, options?: { currency?: boolean; reverseDirection?: boolean }) {
+  if (previous === null || current === null || previous === current) {
+    return null;
+  }
+
+  const difference = current - previous;
+  const percent = previous === 0 ? null : (difference / previous) * 100;
+  const formatValue = (value: number) => options?.currency ? `$${value.toFixed(2)}` : Number.isInteger(value) ? String(value) : value.toFixed(1);
+  const direction = difference > 0 ? "上升" : "下降";
+  const directionLabel = options?.reverseDirection
+    ? direction === "上升" ? "变差" : "改善"
+    : direction;
+
+  return {
+    label,
+    value: `${formatValue(previous)} → ${formatValue(current)}`,
+    detail: percent === null ? directionLabel : `${directionLabel} ${Math.abs(percent).toFixed(1)}%`,
+    tone: options?.reverseDirection ? (difference > 0 ? "negative" : "positive") : (difference > 0 ? "positive" : "negative")
+  } as const;
+}
+
+function buildCompetitorChanges(input: {
+  latest: {
+    price: unknown;
+    rating: unknown;
+    asinSalesCount: number | null;
+    listingSaleCount: number | null;
+    bsr: number | null;
+    variantCount: number | null;
+    isFBA: boolean | null;
+  };
+  previous: {
+    price: unknown;
+    rating: unknown;
+    asinSalesCount: number | null;
+    listingSaleCount: number | null;
+    bsr: number | null;
+    variantCount: number | null;
+    isFBA: boolean | null;
+  } | null;
+}) {
+  if (!input.previous) {
+    return [];
+  }
+
+  const changes = [
+    formatMetricChange("价格", decimalToNumber(input.previous.price), decimalToNumber(input.latest.price), { currency: true }),
+    formatMetricChange(
+      "月销量",
+      getMonthlySales(input.previous.asinSalesCount, input.previous.listingSaleCount),
+      getMonthlySales(input.latest.asinSalesCount, input.latest.listingSaleCount)
+    ),
+    formatMetricChange("BSR", input.previous.bsr, input.latest.bsr, { reverseDirection: true }),
+    formatMetricChange("评分", decimalToNumber(input.previous.rating), decimalToNumber(input.latest.rating)),
+    formatMetricChange("变体数", input.previous.variantCount, input.latest.variantCount)
+  ].filter((item): item is NonNullable<typeof item> => item !== null);
+
+  if (input.previous.isFBA !== null && input.latest.isFBA !== null && input.previous.isFBA !== input.latest.isFBA) {
+    changes.push({
+      label: "配送方式",
+      value: `${input.previous.isFBA ? "FBA" : "FBM"} → ${input.latest.isFBA ? "FBA" : "FBM"}`,
+      detail: "发生变化",
+      tone: "negative" as const
+    });
+  }
+
+  return changes;
+}
+
 function buildTrendRows(
   snapshots: Array<{
     capturedAt: Date;
@@ -196,8 +265,9 @@ export async function getProjectTrendOverview(projectId: string, days = 30) {
         role: true,
         snapshots: {
           orderBy: { capturedAt: "desc" },
-          take: 1,
+          take: 2,
           select: {
+            capturedAt: true,
             price: true,
             rating: true,
             reviewCount: true,
@@ -209,7 +279,8 @@ export async function getProjectTrendOverview(projectId: string, days = 30) {
             aPlus: true,
             hasVideo: true,
             hasBrandStore: true,
-            onlineDays: true
+            onlineDays: true,
+            variantCount: true
           }
         }
       }
@@ -279,6 +350,30 @@ export async function getProjectTrendOverview(projectId: string, days = 30) {
   const latestOwn = latestSnapshots.filter((item) => item.role === TrackedAsinRole.OWN);
   const latestCompetitor = latestSnapshots.filter((item) => item.role === TrackedAsinRole.COMPETITOR);
 
+  const competitorIntelligence = trackedAsins
+    .filter((item) => item.role === TrackedAsinRole.COMPETITOR)
+    .map((item) => {
+      const latest = item.snapshots[0] ?? null;
+      const previous = item.snapshots[1] ?? null;
+
+      return {
+        id: item.id,
+        asin: item.asin,
+        latest: latest
+          ? {
+              capturedAt: latest.capturedAt,
+              price: decimalToNumber(latest.price),
+              rating: decimalToNumber(latest.rating),
+              monthlySales: getMonthlySales(latest.asinSalesCount, latest.listingSaleCount),
+              bsr: latest.bsr,
+              variantCount: latest.variantCount,
+              isFBA: latest.isFBA
+            }
+          : null,
+        changes: latest ? buildCompetitorChanges({ latest, previous }) : []
+      };
+    });
+
   return {
     latestSummary: {
       ownAveragePrice: average(latestOwn.map((item) => item.price)),
@@ -314,7 +409,8 @@ export async function getProjectTrendOverview(projectId: string, days = 30) {
     priceTrend,
     ratingTrend,
     reviewTrend,
-    bsrTrend
+    bsrTrend,
+    competitorIntelligence
   };
 }
 

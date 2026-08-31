@@ -28,6 +28,7 @@ export type SorftimeAdapterResult<T> = {
   data: T;
   apiName: string;
   source: "mock" | "live";
+  receivedAt: Date;
   requestConsumed: number;
   requestLeft: number | null;
   rawPayload: unknown;
@@ -35,6 +36,10 @@ export type SorftimeAdapterResult<T> = {
 
 function shouldUseMock() {
   return process.env.SORFTIME_USE_MOCK !== "false" || !getConfig().accountSk;
+}
+
+export function getSorftimeSource() {
+  return shouldUseMock() ? "mock" : "live";
 }
 
 function getConfig() {
@@ -124,6 +129,7 @@ export async function requestSorftime<TResponseData, TOutput>({
       data: mockData,
       apiName,
       source: "mock",
+      receivedAt: new Date(),
       requestConsumed: 1,
       requestLeft: null,
       rawPayload: mockData
@@ -195,6 +201,7 @@ export async function requestSorftime<TResponseData, TOutput>({
     }),
     apiName,
     source: "live",
+    receivedAt: new Date(),
     requestConsumed: usage.requestConsumed,
     requestLeft: usage.requestLeft,
     rawPayload: payload

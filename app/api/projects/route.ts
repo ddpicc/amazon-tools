@@ -3,13 +3,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { db } from "@/server/db";
+import { createApiErrorResponse } from "@/server/services/billing/api-error-response";
 import { initializeProjectWithSubscriptions } from "@/server/services/project-lifecycle";
-
 const createProjectSchema = z.object({
   name: z.string().min(2),
   marketplace: z.string().min(2),
-  ownAsins: z.array(z.string().min(5)).max(3).default([]),
-  competitorAsins: z.array(z.string().min(5)).max(20).default([])
+  ownAsins: z.array(z.string().min(5)).max(10).default([]),
+  competitorAsins: z.array(z.string().min(5)).max(10).default([])
 });
 
 export async function GET() {
@@ -69,6 +69,10 @@ export async function POST(request: Request) {
     )
   );
 
+  if (ownAsins.length + competitorAsins.length > 10) {
+    return NextResponse.json({ error: "单个项目最多可添加 10 个 ASIN（自有与竞品合计）。" }, { status: 400 });
+  }
+
   try {
     const project = await initializeProjectWithSubscriptions({
       userId: session.user.id,
@@ -80,11 +84,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ project }, { status: 201 });
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Project initialization failed"
-      },
-      { status: 400 }
-    );
+    return createApiErrorResponse(error, "项目创建失败，请检查输入内容后重试。");
   }
 }

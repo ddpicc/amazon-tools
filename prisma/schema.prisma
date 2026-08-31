@@ -12,6 +12,19 @@ enum UserPlan {
   PRO
 }
 
+enum BillingInterval {
+  MONTHLY
+  YEARLY
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  SCHEDULED_DOWNGRADE
+}
+
 enum UserRole {
   ADMIN
   MEMBER
@@ -61,33 +74,183 @@ enum NotificationDeliveryStatus {
 
 enum MonitoringSubscriptionType {
   ASIN
-  KEYWORD
+}
+
+enum DataSourceKind {
+  LIVE_PROVIDER
+  MOCK
+  IMPORT
+  USER_INPUT
+  DERIVED
+  LEGACY_UNKNOWN
+}
+
+enum DataCaptureStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+enum AnalysisType {
+  PRODUCT_LOOKUP
+  REVIEW_INSIGHTS
+  KEYWORD_RESEARCH
+  LISTING_DIAGNOSIS
+  MARKET_OPPORTUNITY
+  COMPETITOR_COMPARE
+}
+
+enum AnalysisRunStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+enum FeedbackStatus {
+  PENDING
+  PLANNED
+  IN_PROGRESS
+  SHIPPED
+  DECLINED
 }
 
 model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
-  name         String?
-  passwordHash String
-  plan         UserPlan  @default(FREE)
-  role         UserRole  @default(MEMBER)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  projects     Project[]
-  inboxNotifications InboxNotification[]
+  id                     String                  @id @default(cuid())
+  email                  String                  @unique
+  name                   String?
+  passwordHash           String
+  plan                   UserPlan                @default(FREE)
+  role                   UserRole                @default(MEMBER)
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  projects               Project[]
+  inboxNotifications     InboxNotification[]
   emailVerificationCodes EmailVerificationCode[]
+  subscription           UserSubscription?
+  entitlementOverride    EntitlementOverride?
+  dataCaptures           DataCapture[]
+  analysisRuns           AnalysisRun[]
+  feedbackRequests       FeedbackRequest[]
+  feedbackComments       FeedbackComment[]
+  feedbackVotes          FeedbackVote[]
+  feedbackFollows        FeedbackFollow[]
+}
+
+model FeedbackRequest {
+  id        String            @id @default(cuid())
+  title     String
+  content   String
+  status    FeedbackStatus    @default(PENDING)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  authorId  String
+  author    User              @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  comments  FeedbackComment[]
+  votes     FeedbackVote[]
+  follows   FeedbackFollow[]
+
+  @@index([status, createdAt(sort: Desc)])
+}
+
+model FeedbackComment {
+  id        String          @id @default(cuid())
+  content   String
+  createdAt DateTime        @default(now())
+  authorId  String
+  author    User            @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  requestId String
+  request   FeedbackRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId, createdAt])
+}
+
+model FeedbackVote {
+  id        String          @id @default(cuid())
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  requestId String
+  request   FeedbackRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, requestId])
+}
+
+model FeedbackFollow {
+  id        String          @id @default(cuid())
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  requestId String
+  request   FeedbackRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, requestId])
+}
+
+model PlanDefinition {
+  id                           String             @id @default(cuid())
+  code                         String             @unique
+  displayName                  String
+  description                  String?
+  priceCents                   Int
+  currency                     String             @default("CNY")
+  interval                     BillingInterval    @default(MONTHLY)
+  active                       Boolean            @default(true)
+  sortOrder                    Int                @default(0)
+  maxProjects                  Int
+  maxTrackedAsins              Int
+  maxOwnAsinsPerProject        Int                @default(3)
+  maxCompetitorAsinsPerProject Int                @default(20)
+  canUseAdvancedAnalytics      Boolean            @default(false)
+  canUseProductResearch        Boolean            @default(false)
+  createdAt                    DateTime           @default(now())
+  updatedAt                    DateTime           @updatedAt
+  subscriptions                UserSubscription[]
+
+  @@index([active, sortOrder])
+}
+
+model UserSubscription {
+  id                 String             @id @default(cuid())
+  userId             String             @unique
+  planId             String
+  status             SubscriptionStatus @default(ACTIVE)
+  billingInterval    BillingInterval    @default(MONTHLY)
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  cancelAtPeriodEnd  Boolean            @default(false)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan               PlanDefinition     @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@index([planId])
+  @@index([status])
+}
+
+model EntitlementOverride {
+  id                           String   @id @default(cuid())
+  userId                       String   @unique
+  maxProjects                  Int?
+  maxTrackedAsins              Int?
+  maxOwnAsinsPerProject        Int?
+  maxCompetitorAsinsPerProject Int?
+  canUseAdvancedAnalytics      Boolean?
+  canUseProductResearch        Boolean?
+  notes                        String?
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+  user                         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model EmailVerificationCode {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   userId     String?
   email      String
   purpose    String
   codeHash   String
   expiresAt  DateTime
   consumedAt DateTime?
-  createdAt  DateTime @default(now())
-  user       User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+  user       User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([email, purpose, createdAt(sort: Desc)])
   @@index([expiresAt])
@@ -95,55 +258,59 @@ model EmailVerificationCode {
 }
 
 model Project {
-  id                   String                 @id @default(cuid())
-  userId               String
-  name                 String
-  marketplace          String
-  notificationEmail    String?
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @updatedAt
-  user                 User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  trackedAsins         TrackedAsin[]
-  keywords             Keyword[]
-  keywordSnapshots     KeywordRankSnapshot[]
-  alerts               Alert[]
-  syncJobs             SyncJob[]
-  apiUsageLogs         ApiUsageLog[]
-  settings             ProjectSettings?
-  notificationChannels NotificationChannel[]
-  inboxNotifications   InboxNotification[]
-  notificationDeliveries NotificationDelivery[]
+  id                      String                   @id @default(cuid())
+  userId                  String
+  name                    String
+  marketplace             String
+  notificationEmail       String?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  user                    User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trackedAsins            TrackedAsin[]
+  alerts                  Alert[]
+  syncJobs                SyncJob[]
+  apiUsageLogs            ApiUsageLog[]
+  settings                ProjectSettings?
+  notificationChannels    NotificationChannel[]
+  inboxNotifications      InboxNotification[]
+  notificationDeliveries  NotificationDelivery[]
   monitoringSubscriptions MonitoringSubscription[]
-  alertSuppressions    AlertSuppressionLog[]
-  dailyDigestRuns      DailyDigestRun[]
+  alertSuppressions       AlertSuppressionLog[]
+  productReviews          ProductReview[]
+  dailyDigestRuns         DailyDigestRun[]
+  dataCaptures            DataCapture[]
+  analysisRuns            AnalysisRun[]
 
   @@index([userId])
   @@index([marketplace])
 }
 
 model TrackedAsin {
-  id                  String             @id @default(cuid())
-  projectId           String
-  asin                String
-  marketplace         String
-  role                TrackedAsinRole    @default(COMPETITOR)
-  title               String?
-  brand               String?
-  category            String?
-  status              TrackedAsinStatus  @default(ACTIVE)
-  lastSyncedAt        DateTime?
-  lastSuccessAt       DateTime?
-  consecutiveFailures Int                @default(0)
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime           @updatedAt
-  project             Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  snapshots           ProductSnapshot[]
-  keywordSnapshots    KeywordRankSnapshot[]
-  alerts              Alert[]
-  syncJobs            SyncJob[]
-  apiUsageLogs        ApiUsageLog[]
+  id                      String                   @id @default(cuid())
+  projectId               String
+  asin                    String
+  marketplace             String
+  role                    TrackedAsinRole          @default(COMPETITOR)
+  title                   String?
+  brand                   String?
+  category                String?
+  status                  TrackedAsinStatus        @default(ACTIVE)
+  lastSyncedAt            DateTime?
+  lastSuccessAt           DateTime?
+  consecutiveFailures     Int                      @default(0)
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  project                 Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  snapshots               ProductSnapshot[]
+  alerts                  Alert[]
+  syncJobs                SyncJob[]
+  apiUsageLogs            ApiUsageLog[]
   monitoringSubscriptions MonitoringSubscription[]
-  alertSuppressions   AlertSuppressionLog[]
+  alertSuppressions       AlertSuppressionLog[]
+  ProductReview           ProductReview[]
+  keywordSnapshots        ProductKeywordSnapshot[]
+  dataCaptures            DataCapture[]
+  analysisRuns            AnalysisRun[]
 
   @@unique([projectId, asin])
   @@index([projectId])
@@ -153,111 +320,223 @@ model TrackedAsin {
 }
 
 model ProductSnapshot {
-  id            String      @id @default(cuid())
-  trackedAsinId String
-  storeName     String?
-  asinSalesCount Int?
-  parentAsin    String?
-  price         Decimal?    @db.Decimal(12, 2)
-  listPrice     Decimal?    @db.Decimal(12, 2)
-  listingSaleCount Int?
+  id                      String             @id @default(cuid())
+  trackedAsinId           String
+  storeName               String?
+  asinSalesCount          Int?
+  parentAsin              String?
+  price                   Decimal?           @db.Decimal(12, 2)
+  listPrice               Decimal?           @db.Decimal(12, 2)
+  listingSaleCount        Int?
   listingSaleCountOfDaily Json?
-  coupon        Int?
-  rating        Decimal?    @db.Decimal(3, 2)
-  reviewCount   Int?
-  bsr           Int?
-  bsrCategory   Json?
-  sellerCount   Int?
-  variantCount  Int?
-  stockStatus   String?
-  title         String?
-  photoUrls     Json?
-  ebcPhotoUrls  Json?
-  brand         String?
-  description   String?
-  buyboxSeller  String?
-  buyboxSellerId String?
-  isFBA         Boolean?
-  shipCost      Int?
-  onlineDate    DateTime?
-  onlineDays    Int?
-  category      String?
-  categoryNodeId String?
-  hasVideo      Boolean?
-  aPlus         Boolean?
-  hasBrandStore Boolean?
-  packageSize   Json?
-  weightGrams   Int?
-  extraSavings  Json?
-  properties    Json?
-  rawPayload    Json?
-  capturedAt    DateTime
-  createdAt     DateTime    @default(now())
-  trackedAsin   TrackedAsin @relation(fields: [trackedAsinId], references: [id], onDelete: Cascade)
+  coupon                  Int?
+  rating                  Decimal?           @db.Decimal(3, 2)
+  reviewCount             Int?
+  bsr                     Int?
+  bsrCategory             Json?
+  sellerCount             Int?
+  variantCount            Int?
+  stockStatus             String?
+  title                   String?
+  photoUrls               Json?
+  ebcPhotoUrls            Json?
+  brand                   String?
+  description             String?
+  buyboxSeller            String?
+  buyboxSellerId          String?
+  isFBA                   Boolean?
+  fbaFee                  Int?
+  shipCost                Int?
+  dealType                String?
+  onlineDate              DateTime?
+  onlineDays              Int?
+  category                String?
+  categoryNodeId          String?
+  hasVideo                Boolean?
+  aPlus                   Boolean?
+  hasBrandStore           Boolean?
+  packageSize             Json?
+  weightGrams             Int?
+  extraSavings            Json?
+  properties              Json?
+  rawPayload              Json?
+  capturedAt              DateTime
+  createdAt               DateTime           @default(now())
+  trackedAsin             TrackedAsin        @relation(fields: [trackedAsinId], references: [id], onDelete: Cascade)
+  captureId               String?
+  capture                 DataCapture?       @relation(fields: [captureId], references: [id], onDelete: SetNull)
+  analysisEvidence        AnalysisEvidence[]
 
   @@index([trackedAsinId, capturedAt(sort: Desc)])
   @@index([capturedAt(sort: Desc)])
+  @@index([captureId])
 }
 
-model Keyword {
-  id              String                @id @default(cuid())
-  projectId       String
-  keyword         String
-  source          String                @default("manual")
-  enabled         Boolean               @default(true)
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
-  project         Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  rankSnapshots   KeywordRankSnapshot[]
+model ProductKeywordSnapshot {
+  id               String             @id @default(cuid())
+  trackedAsinId    String
+  keyword          String
+  naturalRank      Int?
+  sponsoredRank    Int?
+  searchVolume     Int?
+  cpc              Decimal?           @db.Decimal(12, 2)
+  capturedAt       DateTime
+  rawPayload       Json?
+  createdAt        DateTime           @default(now())
+  trackedAsin      TrackedAsin        @relation(fields: [trackedAsinId], references: [id], onDelete: Cascade)
+  captureId        String?
+  capture          DataCapture?       @relation(fields: [captureId], references: [id], onDelete: SetNull)
+  analysisEvidence AnalysisEvidence[]
 
-  @@unique([projectId, keyword])
-  @@index([projectId])
-  @@index([enabled])
+  @@index([trackedAsinId, capturedAt(sort: Desc)])
+  @@index([trackedAsinId, keyword, capturedAt(sort: Desc)])
+  @@index([captureId])
 }
 
-model KeywordRankSnapshot {
-  id            String       @id @default(cuid())
-  projectId     String
-  trackedAsinId String
-  keywordId     String
-  rank          Int?
-  page          Int?
-  rawPayload    Json?
-  capturedAt    DateTime
-  createdAt     DateTime     @default(now())
-  project       Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  trackedAsin   TrackedAsin  @relation(fields: [trackedAsinId], references: [id], onDelete: Cascade)
-  keyword       Keyword      @relation(fields: [keywordId], references: [id], onDelete: Cascade)
+model ProductReview {
+  id               String             @id @default(cuid())
+  trackedAsinId    String
+  externalReviewId String
+  rating           Int
+  title            String?
+  content          String?
+  reviewerName     String?
+  isVerified       Boolean?
+  reviewDate       DateTime?
+  helpfulCount     Int?
+  imageUrls        Json?
+  firstSeenAt      DateTime           @default(now())
+  lastSeenAt       DateTime           @updatedAt
+  rawPayload       Json?
+  trackedAsin      TrackedAsin        @relation(fields: [trackedAsinId], references: [id], onDelete: Cascade)
+  Project          Project?           @relation(fields: [projectId], references: [id])
+  projectId        String?
+  captureId        String?
+  capture          DataCapture?       @relation(fields: [captureId], references: [id], onDelete: SetNull)
+  analysisEvidence AnalysisEvidence[]
+
+  @@unique([trackedAsinId, externalReviewId])
+  @@index([trackedAsinId, rating, reviewDate(sort: Desc)])
+  @@index([trackedAsinId, firstSeenAt(sort: Desc)])
+  @@index([captureId])
+}
+
+model DataCapture {
+  id                String                   @id @default(cuid())
+  userId            String?
+  projectId         String?
+  trackedAsinId     String?
+  marketplace       String
+  provider          String
+  apiName           String
+  sourceKind        DataSourceKind
+  requestedAt       DateTime                 @default(now())
+  receivedAt        DateTime?
+  capturedAt        DateTime?
+  normalizerVersion String?
+  schemaVersion     String?
+  status            DataCaptureStatus        @default(RUNNING)
+  rawPayload        Json?
+  errorMessage      String?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  user              User?                    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  project           Project?                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  trackedAsin       TrackedAsin?             @relation(fields: [trackedAsinId], references: [id], onDelete: Cascade)
+  productSnapshots  ProductSnapshot[]
+  keywordSnapshots  ProductKeywordSnapshot[]
+  productReviews    ProductReview[]
 
   @@index([projectId, capturedAt(sort: Desc)])
-  @@index([trackedAsinId, keywordId, capturedAt(sort: Desc)])
-  @@index([keywordId, capturedAt(sort: Desc)])
+  @@index([trackedAsinId, capturedAt(sort: Desc)])
+  @@index([status, requestedAt(sort: Desc)])
 }
 
 model Alert {
-  id            String        @id @default(cuid())
-  projectId     String
-  trackedAsinId String
-  type          String
-  severity      AlertSeverity
-  status        AlertStatus   @default(OPEN)
-  title         String
-  message       String?
-  oldValue      String?
-  newValue      String?
-  changeValue   String?
-  payload       Json?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  project       Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  trackedAsin   TrackedAsin   @relation(fields: [trackedAsinId], references: [id], onDelete: Cascade)
-  inboxNotifications InboxNotification[]
+  id                     String                 @id @default(cuid())
+  projectId              String
+  trackedAsinId          String
+  type                   String
+  severity               AlertSeverity
+  status                 AlertStatus            @default(OPEN)
+  title                  String
+  message                String?
+  oldValue               String?
+  newValue               String?
+  changeValue            String?
+  payload                Json?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  project                Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  trackedAsin            TrackedAsin            @relation(fields: [trackedAsinId], references: [id], onDelete: Cascade)
+  inboxNotifications     InboxNotification[]
   notificationDeliveries NotificationDelivery[]
-  suppressionLogs AlertSuppressionLog[]
+  suppressionLogs        AlertSuppressionLog[]
+  analysisEvidence       AnalysisEvidence[]
 
   @@index([projectId, createdAt(sort: Desc)])
   @@index([trackedAsinId, createdAt(sort: Desc)])
   @@index([status])
+}
+
+model AnalysisRun {
+  id               String             @id @default(cuid())
+  userId           String
+  projectId        String?
+  trackedAsinId    String?
+  toolKey          String
+  analysisType     AnalysisType
+  marketplace      String
+  status           AnalysisRunStatus  @default(PENDING)
+  inputJson        Json
+  resultJson       Json?
+  provider         String?
+  model            String?
+  promptVersion    String?
+  inputFingerprint String?
+  sourceAsOf       DateTime?
+  requestedAt      DateTime           @default(now())
+  startedAt        DateTime?
+  completedAt      DateTime?
+  attemptCount     Int                @default(0)
+  errorCode        String?
+  errorMessage     String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project          Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  trackedAsin      TrackedAsin?       @relation(fields: [trackedAsinId], references: [id], onDelete: SetNull)
+  evidence         AnalysisEvidence[]
+
+  @@index([userId, requestedAt(sort: Desc)])
+  @@index([projectId, requestedAt(sort: Desc)])
+  @@index([trackedAsinId, requestedAt(sort: Desc)])
+  @@index([status, requestedAt(sort: Desc)])
+}
+
+model AnalysisEvidence {
+  id                       String                  @id @default(cuid())
+  analysisRunId            String
+  productSnapshotId        String?
+  productKeywordSnapshotId String?
+  productReviewId          String?
+  alertId                  String?
+  label                    String
+  excerpt                  String?
+  fieldPath                String?
+  observedAt               DateTime?
+  createdAt                DateTime                @default(now())
+  analysisRun              AnalysisRun             @relation(fields: [analysisRunId], references: [id], onDelete: Cascade)
+  productSnapshot          ProductSnapshot?        @relation(fields: [productSnapshotId], references: [id], onDelete: SetNull)
+  productKeywordSnapshot   ProductKeywordSnapshot? @relation(fields: [productKeywordSnapshotId], references: [id], onDelete: SetNull)
+  productReview            ProductReview?          @relation(fields: [productReviewId], references: [id], onDelete: SetNull)
+  alert                    Alert?                  @relation(fields: [alertId], references: [id], onDelete: SetNull)
+
+  @@index([analysisRunId])
+  @@index([productSnapshotId])
+  @@index([productKeywordSnapshotId])
+  @@index([productReviewId])
+  @@index([alertId])
 }
 
 model SyncJob {
@@ -281,52 +560,52 @@ model SyncJob {
 }
 
 model ApiUsageLog {
-  id                String       @id @default(cuid())
-  projectId         String
-  trackedAsinId     String?
-  apiName           String
-  requestConsumed   Int          @default(1)
-  requestLeft       Int?
-  status            String
-  errorMessage      String?
-  contextRef        String?
-  calledAt          DateTime     @default(now())
-  project           Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  trackedAsin       TrackedAsin? @relation(fields: [trackedAsinId], references: [id], onDelete: Cascade)
+  id              String       @id @default(cuid())
+  projectId       String
+  trackedAsinId   String?
+  apiName         String
+  requestConsumed Int          @default(1)
+  requestLeft     Int?
+  status          String
+  errorMessage    String?
+  contextRef      String?
+  calledAt        DateTime     @default(now())
+  project         Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  trackedAsin     TrackedAsin? @relation(fields: [trackedAsinId], references: [id], onDelete: Cascade)
 
   @@index([projectId, calledAt(sort: Desc)])
   @@index([apiName, calledAt(sort: Desc)])
 }
 
 model ProjectSettings {
-  id                           String    @id @default(cuid())
-  projectId                    String    @unique
-  dailyDigestSendHour          Int       @default(9)
-  dailyDigestSendMinute        Int       @default(0)
-  priceChangeThresholdPercent  Decimal?  @db.Decimal(6, 2)
-  priceChangeThresholdValue    Decimal?  @db.Decimal(12, 2)
-  ratingDropThreshold          Decimal   @default(0.20) @db.Decimal(3, 2)
-  reviewGrowthThreshold        Int       @default(20)
-  bsrChangeThresholdPercent    Decimal   @default(20.00) @db.Decimal(6, 2)
+  id                            String   @id @default(cuid())
+  projectId                     String   @unique
+  dailyDigestSendHour           Int      @default(9)
+  dailyDigestSendMinute         Int      @default(0)
+  priceChangeThresholdPercent   Decimal? @db.Decimal(6, 2)
+  priceChangeThresholdValue     Decimal? @db.Decimal(12, 2)
+  ratingDropThreshold           Decimal  @default(0.20) @db.Decimal(3, 2)
+  reviewGrowthThreshold         Int      @default(20)
+  bsrChangeThresholdPercent     Decimal  @default(20.00) @db.Decimal(6, 2)
   immediateCriticalAlertEnabled Boolean  @default(false)
-  manualRefreshLimitPerDay     Int       @default(10)
-  createdAt                    DateTime  @default(now())
-  updatedAt                    DateTime  @updatedAt
-  project                      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  manualRefreshLimitPerDay      Int      @default(10)
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+  project                       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
 
 model NotificationChannel {
-  id          String                  @id @default(cuid())
-  projectId   String
-  type        NotificationChannelType
-  enabled     Boolean                 @default(true)
-  name        String?
-  webhookUrl  String?
-  email       String?
-  createdAt   DateTime                @default(now())
-  updatedAt   DateTime                @updatedAt
-  project     Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  deliveries  NotificationDelivery[]
+  id         String                  @id @default(cuid())
+  projectId  String
+  type       NotificationChannelType
+  enabled    Boolean                 @default(true)
+  name       String?
+  webhookUrl String?
+  email      String?
+  createdAt  DateTime                @default(now())
+  updatedAt  DateTime                @updatedAt
+  project    Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  deliveries NotificationDelivery[]
 
   @@unique([projectId, type])
   @@index([projectId])
@@ -379,21 +658,21 @@ model NotificationDelivery {
 }
 
 model MonitoringSubscription {
-  id              String                     @id @default(cuid())
-  projectId       String
-  trackedAsinId   String?
-  type            MonitoringSubscriptionType
-  externalStatus  String?
-  enabled         Boolean                    @default(true)
-  keywordsDigest  String?
-  asinDigest      String?
-  lastBatchId     String?
-  lastSyncedAt    DateTime?
-  rawPayload      Json?
-  createdAt       DateTime                   @default(now())
-  updatedAt       DateTime                   @updatedAt
-  project         Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  trackedAsin     TrackedAsin?               @relation(fields: [trackedAsinId], references: [id], onDelete: Cascade)
+  id             String                     @id @default(cuid())
+  projectId      String
+  trackedAsinId  String?
+  type           MonitoringSubscriptionType
+  externalStatus String?
+  enabled        Boolean                    @default(true)
+  keywordsDigest String?
+  asinDigest     String?
+  lastBatchId    String?
+  lastSyncedAt   DateTime?
+  rawPayload     Json?
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+  project        Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  trackedAsin    TrackedAsin?               @relation(fields: [trackedAsinId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, trackedAsinId, type])
   @@index([projectId, type])
@@ -423,17 +702,17 @@ model AlertSuppressionLog {
 }
 
 model DailyDigestRun {
-  id           String   @id @default(cuid())
-  projectId    String
-  digestDate   DateTime
-  status       String
-  summary      String
+  id             String    @id @default(cuid())
+  projectId      String
+  digestDate     DateTime
+  status         String
+  summary        String
   channelResults Json?
-  errorMessage String?
-  sentAt       DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  errorMessage   String?
+  sentAt         DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, digestDate])
   @@index([projectId, digestDate(sort: Desc)])

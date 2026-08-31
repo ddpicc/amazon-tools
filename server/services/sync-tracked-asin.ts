@@ -2,16 +2,21 @@ import { Prisma } from "@prisma/client";
 import { getShanghaiStartOfDay } from "@/lib/shanghai-time";
 import { db } from "@/server/db";
 import { fetchAsinSubscriptionCollection } from "@/server/sorftime/subscriptions";
+import { getSorftimeSource } from "@/server/sorftime/adapter";
 import {
   ensureAsinMonitoringSubscription,
   getAsinMonitoringSubscription,
   markMonitoringSubscriptionPolled
 } from "@/server/services/monitoring-subscriptions";
 import { formatOperationalError } from "@/server/services/failure-classification";
+import { createManualSyncLimitError } from "@/server/services/billing/errors";
+import { syncListingKeywords } from "@/server/services/sync-listing-keywords";
+import { completeDataCapture, failDataCapture, startDataCapture, toDataSourceKind } from "@/server/services/data-captures";
 
 type SyncTrackedAsinOptions = {
   skipManualLimit?: boolean;
   jobType?: string;
+  skipKeywordSync?: boolean;
 };
 
 function normalizeDescriptionWithFallback(current: string, previous: string | null | undefined) {
@@ -44,12 +49,11 @@ export async function syncTrackedAsin(trackedAsinId: string, options: SyncTracke
     throw new Error("Tracked ASIN not found");
   }
 
-  const manualRefreshLimit = trackedAsin.project.settings?.manualRefreshLimitPerDay ?? 10;
   const todayStart = getShanghaiStartOfDay(new Date());
 
   const todaysManualSyncCount = await db.syncJob.count({
     where: {
-      projectId: trackedAsin.projectId,
+      trackedAsinId,
       status: { in: ["RUNNING", "SUCCESS"] },
       jobType: "manual_sync",
       scheduledAt: {
@@ -58,8 +62,8 @@ export async function syncTrackedAsin(trackedAsinId: string, options: SyncTracke
     }
   });
 
-  if (!options.skipManualLimit && todaysManualSyncCount >= manualRefreshLimit) {
-    throw new Error(`Manual sync limit reached for today (${manualRefreshLimit})`);
+  if (!options.skipManualLimit && todaysManualSyncCount >= 1) {
+    throw createManualSyncLimitError(1);
   }
 
   const syncJob = await db.syncJob.create({
@@ -74,6 +78,8 @@ export async function syncTrackedAsin(trackedAsinId: string, options: SyncTracke
     }
   });
 
+  let captureId: string | null = null;
+
   try {
     const ensuredAsinSubscription = await ensureAsinMonitoringSubscription(trackedAsinId);
     const asinSubscription = ensuredAsinSubscription ?? (await getAsinMonitoringSubscription(trackedAsinId));
@@ -82,7 +88,19 @@ export async function syncTrackedAsin(trackedAsinId: string, options: SyncTracke
       throw new Error("ASIN monitoring subscription not found");
     }
 
+    // The monitoring subscription is the authoritative product source. Record
+    // the operation before requesting it so failures remain auditable.
+    const capture = await startDataCapture({
+      userId: trackedAsin.project.userId,
+      projectId: trackedAsin.projectId,
+      trackedAsinId,
+      marketplace: trackedAsin.marketplace,
+      apiName: "ASINSubscriptionCollection",
+      sourceKind: toDataSourceKind(getSorftimeSource())
+    });
+    captureId = capture.id;
     const snapshot = await fetchAsinSubscriptionCollection(trackedAsin.asin, trackedAsin.marketplace);
+    await completeDataCapture(capture.id, snapshot.rawPayload as Prisma.InputJsonValue, snapshot.data.capturedAt);
     const previousSnapshot = trackedAsin.snapshots[0] ?? null;
     const description = normalizeDescriptionWithFallback(snapshot.data.description, previousSnapshot?.description);
 
@@ -117,7 +135,9 @@ export async function syncTrackedAsin(trackedAsinId: string, options: SyncTracke
         buyboxSeller: snapshot.data.buyboxSeller,
         buyboxSellerId: snapshot.data.buyboxSellerId,
         isFBA: snapshot.data.isFBA,
+        fbaFee: snapshot.data.fbaFee,
         shipCost: snapshot.data.shipCost,
+        dealType: snapshot.data.dealType,
         onlineDate: snapshot.data.onlineDate,
         onlineDays: snapshot.data.onlineDays,
         category: snapshot.data.category,
@@ -130,7 +150,8 @@ export async function syncTrackedAsin(trackedAsinId: string, options: SyncTracke
         extraSavings: toNullableJsonValue(snapshot.data.extraSavings),
         properties: toNullableJsonValue(snapshot.data.properties),
         rawPayload: toNullableJsonValue(snapshot.rawPayload as Prisma.InputJsonValue | null),
-        capturedAt: snapshot.data.capturedAt
+        capturedAt: snapshot.data.capturedAt,
+        captureId: capture.id
       }
     });
 
@@ -142,7 +163,7 @@ export async function syncTrackedAsin(trackedAsinId: string, options: SyncTracke
         requestConsumed: snapshot.requestConsumed,
         requestLeft: snapshot.requestLeft,
         status: "SUCCESS",
-        contextRef: `${trackedAsin.asin}:${snapshot.source}`
+        contextRef: `${trackedAsin.asin}:${snapshot.source}:${options.jobType ?? "manual_sync"}`
       }
     });
 
@@ -158,7 +179,20 @@ export async function syncTrackedAsin(trackedAsinId: string, options: SyncTracke
       }
     });
 
-    const alerts: Array<never> = [];
+    if (!options.skipKeywordSync) {
+      await syncListingKeywords(trackedAsinId, createdSnapshot.capturedAt).catch(async (error) => {
+        await db.apiUsageLog.create({
+          data: {
+            projectId: trackedAsin.projectId,
+            trackedAsinId,
+            apiName: "ASINRequestKeyword",
+            status: "FAILED",
+            errorMessage: error instanceof Error ? error.message : "Keyword collection failed",
+            contextRef: trackedAsin.asin
+          }
+        });
+      });
+    }
 
     await db.syncJob.update({
       where: { id: syncJob.id },
@@ -168,9 +202,13 @@ export async function syncTrackedAsin(trackedAsinId: string, options: SyncTracke
       }
     });
 
-    return { snapshot: createdSnapshot, alerts };
+    // The daily digest compares this durable snapshot with its predecessor and
+    // reports every observed change. We deliberately do not classify changes
+    // into alert levels or issue immediate notifications.
+    return { snapshot: createdSnapshot };
   } catch (error) {
     const errorMessage = formatOperationalError(error, "Unknown sync error");
+    if (captureId) await failDataCapture(captureId, error).catch(() => null);
     await db.apiUsageLog.create({
       data: {
         projectId: trackedAsin.projectId,

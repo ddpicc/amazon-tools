@@ -90,7 +90,7 @@ x-cron-secret: <MONITORING_CRON_SECRET>
 
 ## Zeabur 推荐运行节奏
 
-- Sorftime 订阅结果采集：每天 `08:00` 调一次 `POST /api/internal/monitoring/run`
+- Sorftime 订阅结果采集：每天从 `08:00` 起每 10 分钟调一次 `POST /api/internal/monitoring/run`。同日已完成的项目会被跳过，上一批因 `limit_reached` 未处理的项目会在下一次继续处理。
 - 每日摘要发送：每 10 分钟调一次 `POST /api/internal/digests/run`
 - Webhook 自动重试：每 10 分钟调一次 `POST /api/internal/notifications/retry`
 

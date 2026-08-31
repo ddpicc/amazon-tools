@@ -6,7 +6,7 @@ import { loginAction } from "./actions";
 export default async function LoginPage() {
   const session = await auth();
   if (session?.user) {
-    redirect("/projects");
+    redirect("/dashboard");
   }
 
   return (

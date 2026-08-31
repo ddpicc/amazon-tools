@@ -6,9 +6,9 @@ export async function getProjectStats(projectId: string) {
   const todayStart = getShanghaiStartOfDay(new Date());
 
   const [trackedAsinCount, ownAsinCount, competitorAsinCount, todayAlertCount, lastSync] = await Promise.all([
-    db.trackedAsin.count({ where: { projectId } }),
-    db.trackedAsin.count({ where: { projectId, role: TrackedAsinRole.OWN } }),
-    db.trackedAsin.count({ where: { projectId, role: TrackedAsinRole.COMPETITOR } }),
+    db.trackedAsin.count({ where: { projectId, status: "ACTIVE" } }),
+    db.trackedAsin.count({ where: { projectId, status: "ACTIVE", role: TrackedAsinRole.OWN } }),
+    db.trackedAsin.count({ where: { projectId, status: "ACTIVE", role: TrackedAsinRole.COMPETITOR } }),
     db.alert.count({
       where: {
         projectId,
@@ -18,9 +18,9 @@ export async function getProjectStats(projectId: string) {
       }
     }),
     db.trackedAsin.findFirst({
-      where: { projectId },
-      orderBy: { lastSyncedAt: "desc" },
-      select: { lastSyncedAt: true }
+      where: { projectId, status: "ACTIVE", lastSuccessAt: { not: null } },
+      orderBy: { lastSuccessAt: "desc" },
+      select: { lastSuccessAt: true }
     })
   ]);
 
@@ -29,6 +29,6 @@ export async function getProjectStats(projectId: string) {
     ownAsinCount,
     competitorAsinCount,
     todayAlertCount,
-    lastSyncAt: lastSync?.lastSyncedAt ?? null
+    lastSyncAt: lastSync?.lastSuccessAt ?? null
   };
 }

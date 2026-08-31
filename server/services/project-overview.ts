@@ -11,7 +11,6 @@ export async function getProjectOverview(projectId: string) {
     trackedAsinCount,
     ownAsinCount,
     competitorAsinCount,
-    todayAlertCount,
     latestSnapshot,
     firstSnapshot,
     todayDigestRun
@@ -26,14 +25,6 @@ export async function getProjectOverview(projectId: string) {
     db.trackedAsin.count({ where: { projectId } }),
     db.trackedAsin.count({ where: { projectId, role: TrackedAsinRole.OWN } }),
     db.trackedAsin.count({ where: { projectId, role: TrackedAsinRole.COMPETITOR } }),
-    db.alert.count({
-      where: {
-        projectId,
-        createdAt: {
-          gte: todayStart
-        }
-      }
-    }),
     db.productSnapshot.findFirst({
       where: {
         trackedAsin: {
@@ -86,7 +77,6 @@ export async function getProjectOverview(projectId: string) {
     trackedAsinCount,
     ownAsinCount,
     competitorAsinCount,
-    todayAlertCount,
     latestSnapshotAt: latestSnapshot?.capturedAt ?? null,
     todayDigestStatus: todayDigestRun?.status ?? null,
     todayDigestSentAt: todayDigestRun?.sentAt ?? null

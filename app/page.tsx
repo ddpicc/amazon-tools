@@ -3,5 +3,5 @@ import { redirect } from "next/navigation";
 
 export default async function HomePage() {
   const session = await auth();
-  redirect(session?.user?.role === "ADMIN" ? "/admin" : "/projects");
+  redirect(session?.user?.role === "ADMIN" ? "/admin" : "/dashboard");
 }

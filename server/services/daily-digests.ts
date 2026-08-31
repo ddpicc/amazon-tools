@@ -27,12 +27,21 @@ type SnapshotRecord = {
   variantCount: number | null;
   buyboxSeller: string | null;
   coupon: number | null;
+  dealType: string | null;
+  photoUrls: unknown;
+  ebcPhotoUrls: unknown;
   asinSalesCount: number | null;
   listingSaleCount: number | null;
   listingSaleCountOfDaily: unknown;
   hasVideo: boolean | null;
   aPlus: boolean | null;
   hasBrandStore: boolean | null;
+  isFBA: boolean | null;
+  shipCost: number | null;
+  title: string | null;
+  brand: string | null;
+  category: string | null;
+  stockStatus: string | null;
 };
 
 function escapeHtml(value: string) {
@@ -219,12 +228,48 @@ function buildChangeLines(latest: SnapshotRecord | null, previous: SnapshotRecor
     pushIfChanged(lines, `变体数从 ${previous.variantCount} 变为 ${latest.variantCount}`);
   }
 
+  if (latest.isFBA !== null && previous.isFBA !== null && latest.isFBA !== previous.isFBA) {
+    pushIfChanged(lines, `配送方式从 ${previous.isFBA ? "FBA" : "FBM"} 变为 ${latest.isFBA ? "FBA" : "FBM"}`);
+  }
+
+  if (latest.shipCost !== null && previous.shipCost !== null && latest.shipCost !== previous.shipCost) {
+    pushIfChanged(lines, `配送费从 ${previous.shipCost} 变为 ${latest.shipCost}`);
+  }
+
+  if (latest.title && previous.title && latest.title !== previous.title) {
+    pushIfChanged(lines, "Listing 标题已更新");
+  }
+
+  if (latest.brand && previous.brand && latest.brand !== previous.brand) {
+    pushIfChanged(lines, `品牌从 ${previous.brand} 变为 ${latest.brand}`);
+  }
+
+  if (latest.category && previous.category && latest.category !== previous.category) {
+    pushIfChanged(lines, `类目从 ${previous.category} 变为 ${latest.category}`);
+  }
+
+  if (latest.stockStatus && previous.stockStatus && latest.stockStatus !== previous.stockStatus) {
+    pushIfChanged(lines, `在售状态从 ${previous.stockStatus} 变为 ${latest.stockStatus}`);
+  }
+
   if (latest.buyboxSeller && previous.buyboxSeller && latest.buyboxSeller !== previous.buyboxSeller) {
     pushIfChanged(lines, `Buybox 卖家从 ${previous.buyboxSeller} 变为 ${latest.buyboxSeller}`);
   }
 
   if (latest.coupon !== previous.coupon) {
     pushIfChanged(lines, `Coupon 从 ${previous.coupon ?? 0} 变为 ${latest.coupon ?? 0}`);
+  }
+
+  if (latest.dealType !== previous.dealType) {
+    pushIfChanged(lines, `Deal / 秒杀从 ${previous.dealType ?? "无"} 变为 ${latest.dealType ?? "无"}`);
+  }
+
+  if (JSON.stringify(latest.photoUrls) !== JSON.stringify(previous.photoUrls)) {
+    pushIfChanged(lines, "主图已更换");
+  }
+
+  if (JSON.stringify(latest.ebcPhotoUrls) !== JSON.stringify(previous.ebcPhotoUrls)) {
+    pushIfChanged(lines, "A+ 图片已更换");
   }
 
   if (boolLabel(latest.hasVideo) !== boolLabel(previous.hasVideo)) {
@@ -249,6 +294,10 @@ function buildChangeLines(latest: SnapshotRecord | null, previous: SnapshotRecor
   }
 
   return lines;
+}
+
+function significantListingChanges(lines: string[]) {
+  return lines.filter((line) => /价格|Coupon|Deal|秒杀|变体数|评分|BSR|主图|A\+ 图片/.test(line));
 }
 
 function buildLatestMetrics(snapshot: SnapshotRecord | null) {
@@ -515,12 +564,21 @@ async function buildProjectDigest(projectId: string, digestDate: Date) {
               variantCount: true,
               buyboxSeller: true,
               coupon: true,
+              dealType: true,
+              photoUrls: true,
+              ebcPhotoUrls: true,
               asinSalesCount: true,
               listingSaleCount: true,
               listingSaleCountOfDaily: true,
               hasVideo: true,
               aPlus: true,
-              hasBrandStore: true
+              hasBrandStore: true,
+              isFBA: true,
+              shipCost: true,
+              title: true,
+              brand: true,
+              category: true,
+              stockStatus: true
             }
           }
         }
@@ -531,6 +589,21 @@ async function buildProjectDigest(projectId: string, digestDate: Date) {
   if (!project) {
     throw new Error("Project not found");
   }
+
+  const newLowStarReviews = await db.productReview.findMany({
+    where: {
+      trackedAsin: { projectId },
+      firstSeenAt: {
+        gte: digestDate,
+        lte: getShanghaiEndOfDay(digestDate)
+      }
+    },
+    select: {
+      rating: true,
+      title: true,
+      trackedAsin: { select: { asin: true } }
+    }
+  });
 
   const latestPollJob = await db.syncJob.findFirst({
     where: {
@@ -563,17 +636,22 @@ async function buildProjectDigest(projectId: string, digestDate: Date) {
   const ownAsins = items.filter((item) => item.role === TrackedAsinRole.OWN);
   const competitorAsins = items.filter((item) => item.role === TrackedAsinRole.COMPETITOR);
 
+  for (const review of newLowStarReviews) {
+    const item = ownAsins.find((asin) => asin.asin === review.trackedAsin.asin);
+    if (item) {
+      item.summaryLines.push(`新增 ${review.rating} 星评论${review.title ? `：${review.title}` : ""}`);
+    }
+  }
+
   const context: ProjectDigestAiContext = {
     project: project.name,
     marketplace: project.marketplace,
     digestDate: digestDateLabel,
     ownAsins,
     competitorAsins,
-    ownChanges: ownAsins.map((item) => ({
-      asin: item.asin,
-      lines: item.summaryLines
-    })),
+    ownChanges: ownAsins.map((item) => ({ asin: item.asin, lines: significantListingChanges(item.summaryLines) })).filter((item) => item.lines.length > 0),
     competitorChanges: competitorAsins
+      .map((item) => ({ ...item, summaryLines: significantListingChanges(item.summaryLines) }))
       .filter((item) => item.summaryLines.length > 0)
       .map((item) => ({
         asin: item.asin,

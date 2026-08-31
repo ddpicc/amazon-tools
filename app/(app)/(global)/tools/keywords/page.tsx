@@ -1,0 +1,2 @@
+import { KeywordResearchForm } from "@/components/analysis/keyword-research-form";
+export default function KeywordsToolPage(){return <div className="mx-auto max-w-3xl"><p className="font-label text-xs uppercase tracking-[0.2em] text-[var(--md-primary)]">Keyword research</p><h1 className="mt-3 font-headline text-3xl font-bold">关键词研究</h1><p className="mt-2 font-label text-sm text-[var(--md-on-surface-variant)]">按 ASIN 查询关键词、自然排名、广告排名及 Provider 估算指标；不会创建监控订阅。</p><KeywordResearchForm/></div>}

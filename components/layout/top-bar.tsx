@@ -26,19 +26,7 @@ export function TopBar({
   const [unreadCount, setUnreadCount] = useState(unreadNotificationCount);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
 
-  async function handleNotificationClick() {
-    if (unreadCount > 0) {
-      const response = await fetch('/api/notifications', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ markAllRead: true })
-      });
-
-      if (response.ok) {
-        setUnreadCount(0);
-      }
-    }
-
+  function handleNotificationClick() {
     router.push(notificationHref);
     router.refresh();
   }
@@ -70,27 +58,6 @@ export function TopBar({
       </div>
 
       <div className="flex items-center gap-4">
-        {/* Search */}
-        <div className="relative hidden md:block">
-          <input
-            type="text"
-            placeholder="Search..."
-            className="h-9 w-56 rounded-lg border border-[var(--md-outline-variant)] bg-[var(--md-surface-container)] px-3 pl-10 font-label text-sm text-[var(--md-on-surface)] placeholder:text-[var(--md-on-surface-variant)] focus:border-[var(--md-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--md-primary)]"
-          />
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--md-on-surface-variant)]"
-          >
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.3-4.3" />
-          </svg>
-        </div>
-
         <Link
           href={helpHref}
           className="hidden items-center gap-2 rounded-lg border border-[var(--md-outline-variant)] px-3 py-2 font-label text-sm text-[var(--md-on-surface-variant)] transition hover:bg-[var(--md-surface-container)] hover:text-[var(--md-on-surface)] md:inline-flex"

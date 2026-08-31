@@ -23,6 +23,12 @@ const ALERT_COOLDOWN_MINUTES: Partial<Record<string, number>> = {
   review_growth: 6 * 60,
   bsr_change: 6 * 60,
   variant_change: 12 * 60,
+  seller_count_change: 6 * 60,
+  buybox_seller_change: 6 * 60,
+  stock_status_change: 6 * 60,
+  fulfillment_change: 12 * 60,
+  shipping_cost_change: 12 * 60,
+  low_star_review: 24 * 60,
   listing_title_change: 24 * 60,
   listing_brand_change: 24 * 60,
   listing_category_change: 24 * 60

@@ -1,0 +1,12 @@
+CREATE TYPE "FeedbackStatus" AS ENUM ('PENDING', 'PLANNED', 'IN_PROGRESS', 'SHIPPED', 'DECLINED');
+CREATE TABLE "FeedbackRequest" ("id" TEXT NOT NULL, "title" TEXT NOT NULL, "content" TEXT NOT NULL, "status" "FeedbackStatus" NOT NULL DEFAULT 'PENDING', "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL, "authorId" TEXT NOT NULL, CONSTRAINT "FeedbackRequest_pkey" PRIMARY KEY ("id"));
+CREATE TABLE "FeedbackComment" ("id" TEXT NOT NULL, "content" TEXT NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "authorId" TEXT NOT NULL, "requestId" TEXT NOT NULL, CONSTRAINT "FeedbackComment_pkey" PRIMARY KEY ("id"));
+CREATE TABLE "FeedbackVote" ("id" TEXT NOT NULL, "userId" TEXT NOT NULL, "requestId" TEXT NOT NULL, CONSTRAINT "FeedbackVote_pkey" PRIMARY KEY ("id"));
+CREATE INDEX "FeedbackRequest_status_createdAt_idx" ON "FeedbackRequest"("status", "createdAt" DESC);
+CREATE INDEX "FeedbackComment_requestId_createdAt_idx" ON "FeedbackComment"("requestId", "createdAt");
+CREATE UNIQUE INDEX "FeedbackVote_userId_requestId_key" ON "FeedbackVote"("userId", "requestId");
+ALTER TABLE "FeedbackRequest" ADD CONSTRAINT "FeedbackRequest_authorId_fkey" FOREIGN KEY ("authorId") REFERENCES "User"("id") ON DELETE CASCADE;
+ALTER TABLE "FeedbackComment" ADD CONSTRAINT "FeedbackComment_authorId_fkey" FOREIGN KEY ("authorId") REFERENCES "User"("id") ON DELETE CASCADE;
+ALTER TABLE "FeedbackComment" ADD CONSTRAINT "FeedbackComment_requestId_fkey" FOREIGN KEY ("requestId") REFERENCES "FeedbackRequest"("id") ON DELETE CASCADE;
+ALTER TABLE "FeedbackVote" ADD CONSTRAINT "FeedbackVote_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE;
+ALTER TABLE "FeedbackVote" ADD CONSTRAINT "FeedbackVote_requestId_fkey" FOREIGN KEY ("requestId") REFERENCES "FeedbackRequest"("id") ON DELETE CASCADE;
