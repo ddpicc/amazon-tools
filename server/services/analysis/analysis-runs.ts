@@ -4,11 +4,22 @@ import { db } from "@/server/db";
 import { getSorftimeSource } from "@/server/sorftime/adapter";
 import { fetchProductRequest } from "@/server/sorftime/product";
 import { completeDataCapture, failDataCapture, toDataSourceKind } from "@/server/services/data-captures";
-import { fetchCanopyReviews } from "@/server/canopy/reviews";
 import { fetchAsinRequestKeywords } from "@/server/sorftime/product";
+import { fetchReveyesReviews } from "@/server/reveyes/reviews";
+import { generateReviewAiSummary } from "@/server/services/analysis/review-ai-summary";
 
 export type ProductLookupInput = { asin: string; marketplace: string };
-export type ReviewInsightsInput = { asin: string; marketplace: string; lowStarOnly: boolean; projectId?: string };
+export type ReviewInsightsInput = {
+  asin: string;
+  marketplace: string;
+  pages: number;
+  filterStar: "all_stars" | "one_star" | "two_star" | "three_star" | "four_star" | "five_star" | "positive" | "critical";
+  filterSortBy: "recent" | "helpful";
+  filterReviewerType: "all_reviews" | "avp_only_reviews";
+  filterMediaType: "all_contents" | "media_reviews_only";
+  filterVariant: "all_formats" | "current_format";
+  projectId?: string;
+};
 export type KeywordResearchInput = { asin: string; marketplace: string; projectId?: string; trackedAsinId?: string };
 export type ListingDiagnosisInput = { projectId: string; trackedAsinId: string };
 
@@ -89,28 +100,22 @@ async function executeProductLookup(runId: string) {
   return db.analysisRun.findUniqueOrThrow({ where: { id: run.id } });
 }
 
-function reviewInsights(reviews: Array<{ rating: number; title: string | null; body: string | null }>) {
-  const terms = [{ key: "质量/耐用性", words: ["quality", "broke", "broken", "durable", "cheap"] }, { key: "尺寸/适配", words: ["size", "fit", "small", "large"] }, { key: "使用体验", words: ["easy", "difficult", "hard", "instructions"] }, { key: "包装/配送", words: ["package", "packaging", "shipping", "delivery"] }];
-  const themes = terms.map((term) => ({ label: term.key, reviews: reviews.filter((review) => term.words.some((word) => `${review.title ?? ""} ${review.body ?? ""}`.toLowerCase().includes(word))) })).filter((theme) => theme.reviews.length);
-  const excerpts = reviews.filter((review) => review.body).slice(0, 8).map((review) => ({ rating: review.rating, excerpt: `${review.title ? `${review.title} — ` : ""}${review.body}`.slice(0, 420) }));
-  const lowStar = reviews.filter((review) => review.rating <= 3);
-  return { totalReviews: reviews.length, lowStarCount: lowStar.length, lowStarPercent: reviews.length ? Math.round((lowStar.length / reviews.length) * 100) : 0, painPoints: themes.map((theme) => ({ label: theme.label, count: theme.reviews.length, recommendation: `优先核查与“${theme.label}”相关的产品、说明或 Listing 表述。` })), sellingPoints: [], variantIssues: { status: "未识别", note: "Canopy 评论响应未提供可验证的变体标识；本次不推断变体问题。" }, excerpts, limitation: "结论基于本次最多 3 页 Canopy 公开评论与规则主题匹配；未命中的主题不代表不存在。" };
-}
-
 async function executeReviewInsights(runId: string) {
   const run = await db.analysisRun.findUniqueOrThrow({ where: { id: runId } }); const input = run.inputJson as unknown as ReviewInsightsInput; const asin = normalizeAsin(input.asin);
-  const capture = await db.dataCapture.create({ data: { userId: run.userId, projectId: run.projectId, marketplace: input.marketplace, provider: "CANOPY", apiName: "AmazonProductReviews", sourceKind: "LIVE_PROVIDER", normalizerVersion: "canopy-rest-v1", schemaVersion: "2026-08-28" } });
+  const filters = { pages: Number.isInteger(input.pages) && input.pages >= 1 && input.pages <= 10 ? input.pages : 1, filterStar: input.filterStar ?? "all_stars", filterSortBy: input.filterSortBy ?? "recent", filterReviewerType: input.filterReviewerType ?? "all_reviews", filterMediaType: input.filterMediaType ?? "all_contents", filterVariant: input.filterVariant ?? "all_formats" } as const;
+  const capture = await db.dataCapture.create({ data: { userId: run.userId, projectId: run.projectId, marketplace: input.marketplace, provider: "REVEYES", apiName: "POST /v1/reviews/fetch + GET /v1/reviews/result/{task_id}", sourceKind: "LIVE_PROVIDER", normalizerVersion: "reveyes-open-v1", schemaVersion: "2026-09-01" } });
   try {
-    const response = await fetchCanopyReviews({ asin, marketplace: input.marketplace, lowStarOnly: input.lowStarOnly }); const capturedAt = new Date();
+    const response = await fetchReveyesReviews(asin, input.marketplace, filters); const capturedAt = new Date();
     await completeDataCapture(capture.id, response.rawPayload as Prisma.InputJsonValue, capturedAt);
-    const result = reviewInsights(response.reviews);
-    await db.$transaction(async (tx) => { await tx.analysisEvidence.deleteMany({ where: { analysisRunId: run.id } }); await tx.analysisEvidence.createMany({ data: result.excerpts.map((item, index) => ({ analysisRunId: run.id, label: `评论原话 ${index + 1}（${item.rating} 星）`, excerpt: item.excerpt, fieldPath: "canopy.reviews", observedAt: capturedAt })) }); await tx.analysisRun.update({ where: { id: run.id }, data: { status: "SUCCESS", provider: "CANOPY", sourceAsOf: capturedAt, resultJson: { asin, ...result, sourceKind: "LIVE_PROVIDER" } as Prisma.InputJsonValue, completedAt: capturedAt, errorCode: null, errorMessage: null } }); });
-  } catch (error) { await failDataCapture(capture.id, error).catch(() => null); await db.analysisRun.update({ where: { id: run.id }, data: { status: "FAILED", completedAt: new Date(), errorCode: "CANOPY_ERROR", errorMessage: error instanceof Error ? error.message : "评论分析失败" } }); }
+    const reviews = response.reviews.map((review) => ({ id: review.id, rating: review.rating, title: review.title, content: review.content, reviewerName: review.reviewerName, isVerified: review.isVerified, reviewDate: review.reviewDate?.toISOString() ?? null, helpfulCount: review.helpfulCount, productVariant: review.productVariant, page: review.page, imageUrls: review.imageUrls }));
+    const ai = await generateReviewAiSummary({ asin, marketplace: input.marketplace, reviews });
+    await db.$transaction(async (tx) => { await tx.analysisEvidence.deleteMany({ where: { analysisRunId: run.id } }); await tx.analysisEvidence.createMany({ data: reviews.filter((review) => review.content).slice(0, 20).map((review, index) => ({ analysisRunId: run.id, label: `评论原话 ${index + 1}（${review.rating} 星）`, excerpt: `${review.title ? `${review.title} — ` : ""}${review.content}`.slice(0, 1000), fieldPath: "Reveyes.reviews", observedAt: capturedAt })) }); await tx.analysisRun.update({ where: { id: run.id }, data: { status: "SUCCESS", provider: "REVEYES + OPENAI", model: ai.model, sourceAsOf: capturedAt, resultJson: { asin, marketplace: input.marketplace, taskId: response.taskId, filters, reviews, totalReviews: reviews.length, analyzedReviewCount: ai.analyzedReviewCount, aiSummary: ai.summary, sourceKind: "LIVE_PROVIDER", limitation: `Reveyes 按请求页数返回评论；AI 最多分析前 ${ai.analyzedReviewCount} 条，每条正文最多 1200 个字符。` } as Prisma.InputJsonValue, completedAt: new Date(), errorCode: null, errorMessage: null } }); });
+  } catch (error) { await failDataCapture(capture.id, error).catch(() => null); await db.analysisRun.update({ where: { id: run.id }, data: { status: "FAILED", completedAt: new Date(), errorCode: "REVIEW_INSIGHTS_ERROR", errorMessage: error instanceof Error ? error.message : "评论分析失败" } }); }
   return db.analysisRun.findUniqueOrThrow({ where: { id: run.id } });
 }
 
 export async function createReviewInsightsRun(userId: string, rawInput: ReviewInsightsInput) {
-  const input = { asin: normalizeAsin(rawInput.asin), marketplace: rawInput.marketplace.trim(), lowStarOnly: rawInput.lowStarOnly, projectId: rawInput.projectId };
+  const input = { asin: normalizeAsin(rawInput.asin), marketplace: rawInput.marketplace.trim(), pages: rawInput.pages, filterStar: rawInput.filterStar, filterSortBy: rawInput.filterSortBy, filterReviewerType: rawInput.filterReviewerType, filterMediaType: rawInput.filterMediaType, filterVariant: rawInput.filterVariant, projectId: rawInput.projectId };
   if (!input.marketplace) throw new Error("请选择站点"); if (input.projectId) { const project = await db.project.findFirst({ where: { id: input.projectId, userId }, select: { marketplace: true } }); if (!project || project.marketplace !== input.marketplace) throw new Error("项目不存在或站点不一致"); }
   const run = await db.analysisRun.create({ data: { userId, projectId: input.projectId, toolKey: "review-insights", analysisType: "REVIEW_INSIGHTS", marketplace: input.marketplace, status: "RUNNING", inputJson: input, inputFingerprint: inputFingerprint(input), startedAt: new Date(), attemptCount: 1 } }); return executeReviewInsights(run.id);
 }

@@ -276,7 +276,6 @@ model Project {
   notificationDeliveries  NotificationDelivery[]
   monitoringSubscriptions MonitoringSubscription[]
   alertSuppressions       AlertSuppressionLog[]
-  productReviews          ProductReview[]
   dailyDigestRuns         DailyDigestRun[]
   dataCaptures            DataCapture[]
   analysisRuns            AnalysisRun[]
@@ -409,8 +408,6 @@ model ProductReview {
   lastSeenAt       DateTime           @updatedAt
   rawPayload       Json?
   trackedAsin      TrackedAsin        @relation(fields: [trackedAsinId], references: [id], onDelete: Cascade)
-  Project          Project?           @relation(fields: [projectId], references: [id])
-  projectId        String?
   captureId        String?
   capture          DataCapture?       @relation(fields: [captureId], references: [id], onDelete: SetNull)
   analysisEvidence AnalysisEvidence[]

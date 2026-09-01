@@ -4,7 +4,18 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 const productLookupInput = z.object({ toolKey: z.literal("product-lookup"), asin: z.string(), marketplace: z.string() });
-const reviewInsightsInput = z.object({ toolKey: z.literal("review-insights"), asin: z.string(), marketplace: z.string(), lowStarOnly: z.boolean().default(true), projectId: z.string().optional() });
+const reviewInsightsInput = z.object({
+  toolKey: z.literal("review-insights"),
+  asin: z.string(),
+  marketplace: z.string(),
+  pages: z.number().int().min(1).max(10).default(1),
+  filterStar: z.enum(["all_stars", "one_star", "two_star", "three_star", "four_star", "five_star", "positive", "critical"]).default("all_stars"),
+  filterSortBy: z.enum(["recent", "helpful"]).default("recent"),
+  filterReviewerType: z.enum(["all_reviews", "avp_only_reviews"]).default("all_reviews"),
+  filterMediaType: z.enum(["all_contents", "media_reviews_only"]).default("all_contents"),
+  filterVariant: z.enum(["all_formats", "current_format"]).default("all_formats"),
+  projectId: z.string().optional()
+});
 const keywordInput = z.object({ toolKey: z.literal("keyword-research"), asin: z.string(), marketplace: z.string(), projectId: z.string().optional(), trackedAsinId: z.string().optional() });
 const listingInput = z.object({ toolKey: z.literal("listing-diagnosis"), projectId: z.string(), trackedAsinId: z.string() });
 

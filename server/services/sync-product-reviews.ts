@@ -10,7 +10,14 @@ export async function syncTrackedAsinLowStarReviews(trackedAsinId: string) {
   const existingCount = await db.productReview.count({ where: { trackedAsinId } });
   const capture = await startDataCapture({ userId: tracked.project.userId, projectId: tracked.projectId, trackedAsinId, marketplace: tracked.marketplace, apiName: "ReveyesReviewsFetch", sourceKind: "LIVE_PROVIDER" });
   try {
-  const result = await fetchReveyesReviews(tracked.asin, tracked.marketplace, existingCount ? 1 : 10);
+  const result = await fetchReveyesReviews(tracked.asin, tracked.marketplace, {
+    pages: existingCount ? 1 : 10,
+    filterStar: "all_stars",
+    filterSortBy: "recent",
+    filterReviewerType: "all_reviews",
+    filterMediaType: "all_contents",
+    filterVariant: "all_formats"
+  });
   await completeDataCapture(capture.id, result.rawPayload as Prisma.InputJsonValue, new Date());
   const reviews = result.reviews;
   let newReviewCount = 0;
@@ -19,8 +26,8 @@ export async function syncTrackedAsinLowStarReviews(trackedAsinId: string) {
     const current = await db.productReview.findUnique({ where: { trackedAsinId_externalReviewId: { trackedAsinId, externalReviewId: review.id } }, select: { id: true } });
     await db.productReview.upsert({
       where: { trackedAsinId_externalReviewId: { trackedAsinId, externalReviewId: review.id } },
-      create: { projectId: tracked.projectId, trackedAsinId, externalReviewId: review.id, rating: review.rating, title: review.title, content: review.content, reviewerName: review.reviewerName, isVerified: review.isVerified, reviewDate: review.reviewDate, helpfulCount: review.helpfulCount, imageUrls: review.imageUrls, rawPayload: review.rawPayload, captureId: capture.id },
-      update: { projectId: tracked.projectId, rating: review.rating, title: review.title, content: review.content, reviewerName: review.reviewerName, isVerified: review.isVerified, reviewDate: review.reviewDate, helpfulCount: review.helpfulCount, imageUrls: review.imageUrls, rawPayload: review.rawPayload, captureId: capture.id }
+      create: { trackedAsinId, externalReviewId: review.id, rating: review.rating, title: review.title, content: review.content, reviewerName: review.reviewerName, isVerified: review.isVerified, reviewDate: review.reviewDate, helpfulCount: review.helpfulCount, imageUrls: review.imageUrls, rawPayload: review.rawPayload, captureId: capture.id },
+      update: { rating: review.rating, title: review.title, content: review.content, reviewerName: review.reviewerName, isVerified: review.isVerified, reviewDate: review.reviewDate, helpfulCount: review.helpfulCount, imageUrls: review.imageUrls, rawPayload: review.rawPayload, captureId: capture.id }
     });
     if (!current) newReviewCount += 1;
   }

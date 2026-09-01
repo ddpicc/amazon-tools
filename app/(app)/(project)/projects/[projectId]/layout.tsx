@@ -59,15 +59,6 @@ export default async function ProjectLayout({ params, children }: ProjectLayoutP
     {
       icon: (
         <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
-          <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z" />
-        </svg>
-      ),
-      label: '报告与通知',
-      href: `/projects/${params.projectId}/digest`
-    },
-    {
-      icon: (
-        <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
           <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
         </svg>
       ),
@@ -80,6 +71,15 @@ export default async function ProjectLayout({ params, children }: ProjectLayoutP
       ),
       label: 'Listing 深度分析',
       href: `/projects/${params.projectId}/listing-analysis`
+    },
+    {
+      icon: (
+        <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+          <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z" />
+        </svg>
+      ),
+      label: '报告与通知',
+      href: `/projects/${params.projectId}/digest`
     },
     {
       icon: (
