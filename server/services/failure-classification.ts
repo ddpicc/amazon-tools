@@ -1,3 +1,5 @@
+import { publicText } from "@/lib/public-text";
+
 type FailureCategory =
   | "AUTH"
   | "RATE_LIMIT"
@@ -65,7 +67,7 @@ function classifyByStatusOrCode(meta: ParsedFailureMeta): FailureClassification 
 
   if (meta.code !== null) {
     if (meta.code >= 500) {
-      return { category: "SORFTIME_API", label: "Sorftime 接口错误", detail: buildDetail(meta) };
+      return { category: "SORFTIME_API", label: "数据服务错误", detail: buildDetail(meta) };
     }
 
     if (meta.code >= 400) {
@@ -147,7 +149,7 @@ function pickCategory(message: string): FailureClassification {
   }
 
   if (text.includes("sorftime")) {
-    return { category: "SORFTIME_API", label: "Sorftime 接口错误", detail: buildDetail(meta) };
+    return { category: "SORFTIME_API", label: "数据服务错误", detail: buildDetail(meta) };
   }
 
   return { category: "UNKNOWN", label: "未知错误", detail: buildDetail(meta) };
@@ -175,7 +177,7 @@ export function formatOperationalError(error: unknown, fallbackMessage: string) 
       ? (error as Error & { code: number }).code
       : null;
 
-  const parts = [error.message || fallbackMessage];
+  const parts = [publicText(error.message || fallbackMessage)];
   if (status !== null) {
     parts.push(`status=${status}`);
   }

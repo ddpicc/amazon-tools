@@ -3,6 +3,7 @@
 import { NotificationDeliveryStatus, NotificationChannelType, SyncJobStatus } from "@prisma/client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { publicText } from "@/lib/public-text";
 
 type ProjectMonitoringHistoryProps = {
   projectId: string;
@@ -73,7 +74,7 @@ function channelLabel(channelType: NotificationChannelType) {
 function failureStyle(label: string) {
   if (label.includes("权限")) return "bg-[var(--md-error)]/10 text-[var(--md-error)]";
   if (label.includes("限流")) return "bg-[var(--md-primary)]/10 text-[var(--md-primary)]";
-  if (label.includes("Sorftime")) return "bg-sky-500/10 text-sky-300";
+  if (label.includes("数据服务")) return "bg-sky-500/10 text-sky-300";
   return "bg-[var(--md-surface-container)] text-[var(--md-on-surface-variant)]";
 }
 
@@ -150,7 +151,7 @@ export function ProjectMonitoringHistory({
                   ) : null}
                   {job.failureDetail ? <p className="mt-2 font-label text-xs text-[var(--md-on-surface-variant)]">{job.failureDetail}</p> : null}
                   <p className="mt-2 font-label text-sm text-[var(--md-on-surface-variant)]">完成时间：{formatDate(job.finishedAt)}</p>
-                  {job.errorMessage ? <p className="mt-2 font-label text-sm text-[var(--md-error)]">{job.errorMessage}</p> : null}
+                  {job.errorMessage ? <p className="mt-2 font-label text-sm text-[var(--md-error)]">{publicText(job.errorMessage)}</p> : null}
                 </div>
               ))
             ) : (
@@ -184,7 +185,7 @@ export function ProjectMonitoringHistory({
                   {delivery.failureDetail ? <p className="mt-2 font-label text-xs text-[var(--md-on-surface-variant)]">{delivery.failureDetail}</p> : null}
                   <p className="mt-2 font-label text-sm text-[var(--md-on-surface-variant)]">{delivery.alert.title}</p>
                   <p className="mt-1 font-label text-sm text-[var(--md-outline)]">{formatDate(delivery.createdAt)}</p>
-                  {delivery.errorMessage ? <p className="mt-2 font-label text-sm text-[var(--md-error)]">{delivery.errorMessage}</p> : null}
+                  {delivery.errorMessage ? <p className="mt-2 font-label text-sm text-[var(--md-error)]">{publicText(delivery.errorMessage)}</p> : null}
                 </div>
               ))
             ) : (
@@ -228,7 +229,7 @@ export function ProjectMonitoringHistory({
                     <span className="font-label text-xs text-[var(--md-on-surface-variant)]">{formatDate(digest.digestDate)}</span>
                   </div>
                   <p className="mt-2 font-label text-sm text-[var(--md-on-surface-variant)]">发送时间：{formatDate(digest.sentAt)}</p>
-                  {digest.errorMessage ? <p className="mt-2 font-label text-sm text-[var(--md-error)]">{digest.errorMessage}</p> : null}
+                  {digest.errorMessage ? <p className="mt-2 font-label text-sm text-[var(--md-error)]">{publicText(digest.errorMessage)}</p> : null}
                 </div>
               ))
             ) : (

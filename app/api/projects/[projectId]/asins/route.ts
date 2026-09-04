@@ -6,6 +6,7 @@ import { db } from "@/server/db";
 import { createApiErrorResponse } from "@/server/services/billing/api-error-response";
 import { assertCanUpsertTrackedAsins } from "@/server/services/entitlements";
 import { formatOperationalError } from "@/server/services/failure-classification";
+import { syncTrackedAsinLowStarReviews } from "@/server/services/sync-product-reviews";
 import { syncTrackedAsin } from "@/server/services/sync-tracked-asin";
 const trackedAsinRoleSchema = z.nativeEnum(TrackedAsinRole);
 
@@ -125,19 +126,27 @@ export async function POST(
         continue;
       }
 
+      const errors: string[] = [];
       try {
         await syncTrackedAsin(item.id, {
           skipManualLimit: true,
           jobType: "initial_sync"
         });
-        initialCollections.push({ trackedAsinId: item.id, status: "SUCCESS" });
       } catch (error) {
-        initialCollections.push({
-          trackedAsinId: item.id,
-          status: "FAILED",
-          error: formatOperationalError(error, "首次采集失败，系统会在下次定时任务中重试。")
-        });
+        errors.push(formatOperationalError(error, "首次 Listing 采集失败，系统会在下次定时任务中重试。"));
       }
+
+      if (item.role === TrackedAsinRole.OWN) {
+        try {
+          await syncTrackedAsinLowStarReviews(item.id);
+        } catch (error) {
+          errors.push(formatOperationalError(error, "首次评论采集失败，系统会在下次定时任务中重试。"));
+        }
+      }
+
+      initialCollections.push(errors.length
+        ? { trackedAsinId: item.id, status: "FAILED", error: errors.join("；") }
+        : { trackedAsinId: item.id, status: "SUCCESS" });
     }
 
     const items = await db.trackedAsin.findMany({

@@ -1,7 +1,8 @@
 import { auth } from '@/auth';
 import Link from 'next/link';
 import { formatDateTime } from '@/lib/date-time';
-import { getShanghaiStartOfDay } from '@/lib/shanghai-time';
+import { formatShanghaiDate, getShanghaiStartOfDay } from '@/lib/shanghai-time';
+import { digestPreview } from '@/lib/digest-display';
 import {
   MetricCard,
   Surface
@@ -10,6 +11,7 @@ import { ApiUsagePanel } from '@/components/usage/api-usage-panel';
 import { db } from '@/server/db';
 import { getProjectApiUsage } from '@/server/services/api-usage';
 import { getProjectOverview } from '@/server/services/project-overview';
+import { DigestModal } from '@/components/projects/digest-modal';
 
 function fmtDateTime(v: Date | null) {
   return formatDateTime(v);
@@ -124,7 +126,7 @@ export default async function ProjectDetailPage({
       </div>
 
       <Surface>
-        <div className="flex items-center justify-between gap-4"><div><h2 className="font-headline text-xl font-semibold text-[var(--md-on-surface)]">今日需处理</h2><p className="mt-1 font-label text-sm text-[var(--md-on-surface-variant)]">优先处理采集失败和新发现的低星评论。</p></div><Link href={`/projects/${project.id}/trends`} className="font-label text-sm text-[var(--md-primary)]">查看监控动态</Link></div><div className="mt-5 grid gap-3 md:grid-cols-2">{failedAsins.map((item) => <div key={item.asin} className="rounded-xl border border-[var(--md-error)]/30 p-4 font-label text-sm"><strong>{item.asin}</strong> 已连续采集失败 {item.consecutiveFailures} 次</div>)}{newLowStarReviews.map((review, index) => <Link key={`${review.trackedAsin.asin}-${index}`} href={`/projects/${project.id}/reviews`} className="rounded-xl border border-amber-500/30 p-4 font-label text-sm"><strong>{review.trackedAsin.asin}</strong> 新增 {review.rating} 星评论</Link>)}{!failedAsins.length && !newLowStarReviews.length ? <p className="rounded-xl border border-dashed border-[var(--md-outline-variant)] p-4 font-label text-sm text-[var(--md-on-surface-variant)]">暂无需要立即处理的事项。</p> : null}</div>{latestDigest ? <div className="mt-5 rounded-xl bg-[var(--md-surface-container-low)] p-4"><p className="font-label text-xs text-[var(--md-on-surface-variant)]">最近日报 · {latestDigest.digestDate.toLocaleDateString("zh-CN")}</p><p className="mt-2 line-clamp-3 whitespace-pre-wrap font-label text-sm text-[var(--md-on-surface-variant)]">{latestDigest.summary}</p><Link href={`/projects/${project.id}/digest`} className="mt-3 inline-block font-label text-sm text-[var(--md-primary)]">查看完整日报</Link></div> : null}</Surface>
+        <div className="flex items-center justify-between gap-4"><div><h2 className="font-headline text-xl font-semibold text-[var(--md-on-surface)]">今日需处理</h2><p className="mt-1 font-label text-sm text-[var(--md-on-surface-variant)]">优先处理采集失败和新发现的低星评论。</p></div><Link href={`/projects/${project.id}/trends`} className="font-label text-sm text-[var(--md-primary)]">查看监控动态</Link></div><div className="mt-5 grid gap-3 md:grid-cols-2">{failedAsins.map((item) => <div key={item.asin} className="rounded-xl border border-[var(--md-error)]/30 p-4 font-label text-sm"><strong>{item.asin}</strong> 已连续采集失败 {item.consecutiveFailures} 次</div>)}{newLowStarReviews.map((review, index) => <Link key={`${review.trackedAsin.asin}-${index}`} href={`/projects/${project.id}/reviews`} className="rounded-xl border border-amber-500/30 p-4 font-label text-sm"><strong>{review.trackedAsin.asin}</strong> 新增 {review.rating} 星评论</Link>)}{!failedAsins.length && !newLowStarReviews.length ? <p className="rounded-xl border border-dashed border-[var(--md-outline-variant)] p-4 font-label text-sm text-[var(--md-on-surface-variant)]">暂无需要立即处理的事项。</p> : null}</div>{latestDigest ? <div className="mt-5 rounded-xl bg-[var(--md-surface-container-low)] p-4"><p className="font-label text-xs text-[var(--md-on-surface-variant)]">最近日报 · {formatShanghaiDate(latestDigest.digestDate)}</p><p className="mt-2 line-clamp-3 whitespace-pre-wrap font-label text-sm text-[var(--md-on-surface-variant)]">{digestPreview(latestDigest.summary)}</p><DigestModal dateLabel={formatShanghaiDate(latestDigest.digestDate)} summary={latestDigest.summary} /></div> : null}</Surface>
 
       {isAdmin && apiUsage ? <ApiUsagePanel usage={apiUsage} /> : null}
     </div>

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { publicText } from "@/lib/public-text";
 
 export function ProductLookupForm() {
   const router = useRouter();
@@ -17,7 +18,7 @@ export function ProductLookupForm() {
     const response = await fetch("/api/analysis-runs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ toolKey: "product-lookup", asin, marketplace }) });
     const payload = await response.json();
     setSubmitting(false);
-    if (!response.ok) return setError(payload.error ?? "创建任务失败");
+    if (!response.ok) return setError(publicText(payload.error ?? "创建任务失败"));
     router.push(`/analysis/${payload.id}`);
   }
 

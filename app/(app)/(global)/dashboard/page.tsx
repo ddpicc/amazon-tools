@@ -28,12 +28,12 @@ function actionLabel(kind: HomeDashboardAction["kind"]) {
       return "采集失败";
     case "STALE_DATA":
       return "数据状态";
-    case "REVIEW":
-      return "用户声音";
     case "DELIVERY_FAILURE":
       return "投递失败";
     case "DIGEST_FAILURE":
       return "日报状态";
+    case "DAILY_DIGEST":
+      return "日报";
   }
 }
 
@@ -88,7 +88,7 @@ export default async function DashboardPage() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h2 className="font-headline text-xl font-semibold text-[var(--md-on-surface)]">需要关注</h2>
-            <p className="mt-1 font-label text-sm text-[var(--md-on-surface-variant)]">仅展示已保存在本地的监控和通知事实，不在此页面触发外部采集。</p>
+            <p className="mt-1 font-label text-sm text-[var(--md-on-surface-variant)]">有采集、投递或日报异常时优先显示；没有异常时显示各项目最近日报。</p>
           </div>
           <span className="font-label text-sm text-[var(--md-on-surface-variant)]">{dashboard.actions.length} 项</span>
         </div>
@@ -107,7 +107,7 @@ export default async function DashboardPage() {
                   </span>
                   <div className="min-w-0">
                     <p className="font-headline text-sm font-semibold text-[var(--md-on-surface)]">{action.title}</p>
-                    <p className="mt-1 line-clamp-2 font-label text-sm text-[var(--md-on-surface-variant)]">{action.detail}</p>
+                    <p className="mt-1 line-clamp-4 whitespace-pre-wrap font-label text-sm text-[var(--md-on-surface-variant)]">{action.detail}</p>
                     <p className="mt-2 font-label text-xs text-[var(--md-outline)]">
                       {action.marketplace} · {action.projectName}{action.asin ? ` · ${action.asin}` : ""}
                     </p>

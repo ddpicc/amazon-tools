@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Amazon Competitor Monitor",
-  description: "Sorftime-powered competitor monitoring dashboard",
+  description: "Amazon competitor monitoring dashboard",
   icons: {
     icon: "/icon.svg",
   },

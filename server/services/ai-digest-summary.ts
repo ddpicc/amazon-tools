@@ -1,10 +1,9 @@
 import OpenAI from "openai";
+import { sanitizeDigestText } from "@/lib/digest-display";
 
 type DigestSections = {
-  overview: string;
   ownProduct: string;
   competitors: string;
-  action: string;
 };
 
 export type DigestContextItem = {
@@ -25,6 +24,7 @@ export type DigestContextItem = {
     buyboxSeller: string | null;
   }>;
   latestMetrics: Record<string, string | number | null>;
+  keywordChanges: string[];
 };
 
 export type ProjectDigestAiContext = {
@@ -35,8 +35,6 @@ export type ProjectDigestAiContext = {
   competitorAsins: DigestContextItem[];
   ownChanges: Array<{ asin: string; lines: string[] }>;
   competitorChanges: Array<{ asin: string; lines: string[] }>;
-  crossComparisons: string[];
-  stabilityNotes: string[];
 };
 
 const defaultModel = process.env.OPENAI_MODEL || "gpt-4o-mini";
@@ -58,27 +56,25 @@ function normalizeSection(value: unknown, fallback: string) {
 }
 
 export function buildFallbackDigestSections(context: ProjectDigestAiContext): DigestSections {
-  const ownLines = context.ownChanges.flatMap((item) =>
-    item.lines.slice(0, 2).map((line) => `${item.asin}：${line}`)
-  );
-  const competitorLines = context.competitorChanges.flatMap((item) =>
-    item.lines.slice(0, 2).map((line) => `${item.asin}：${line}`)
-  );
+  const formatAsinChanges = (items: Array<{ asin: string; lines: string[] }>) =>
+    items
+      .map((item) => {
+        const lines = item.lines.slice(0, 8).map(sanitizeDigestText).filter(Boolean);
+        return lines.length ? `${item.asin}：${lines.join("；")}` : null;
+      })
+      .filter((item): item is string => Boolean(item))
+      .join("\n\n");
+
+  const ownLines = formatAsinChanges(context.ownChanges);
+  const competitorLines = formatAsinChanges(context.competitorChanges);
 
   return {
-    overview:
-      ownLines.length || competitorLines.length
-        ? `今天共监测 ${context.ownAsins.length} 个 own ASIN 和 ${context.competitorAsins.length} 个竞品 ASIN，重点变化集中在${ownLines.length ? " own listing" : ""}${ownLines.length && competitorLines.length ? "和" : ""}${competitorLines.length ? "竞品动作" : ""}。`
-        : "今天主要指标整体稳定，没有出现明显的价格、评分、评论或排名波动。",
     ownProduct: ownLines.length
-      ? ownLines.join("；")
-      : "你的产品今天没有出现明显变化，核心指标整体稳定。",
+      ? ownLines
+      : "自有商品今天未发现明显变化。",
     competitors: competitorLines.length
-      ? competitorLines.join("；")
-      : "竞品今天没有明显变化，暂无需要单独点名关注的动作。",
-    action: context.crossComparisons.length
-      ? `优先关注：${context.crossComparisons.slice(0, 2).join("；")}`
-      : "建议继续观察明天的价格、BSR 和评论增长情况，确认当前 listing 状态是否持续稳定。"
+      ? competitorLines
+      : "竞品今天未发现明显变化。"
   };
 }
 
@@ -86,10 +82,8 @@ export function formatDigestText(title: string, sections: DigestSections) {
   return [
     title,
     "",
-    `今日总览：${sections.overview}`,
     `你的产品变化：${sections.ownProduct}`,
-    `竞品变化：${sections.competitors}`,
-    `建议关注：${sections.action}`
+    `竞品变化：${sections.competitors}`
   ].join("\n");
 }
 
@@ -116,7 +110,7 @@ export async function generateAiDigestSections(context: ProjectDigestAiContext) 
         {
           role: "system",
           content:
-            "你是一个亚马逊竞品监控日报助手。你会收到一个项目中 own ASIN 与 competitor ASIN 的最近几次快照摘要。请基于这些数据生成一份中文运营日报。你必须严格依据输入内容总结，不要编造不存在的数据或原因。请优先指出 own 产品的关键变化、竞品的关键变化、双方对比后最值得关注的点，以及运营上下一步最需要关注的事项。输出要短、清楚、可执行，适合早上快速浏览。请只返回 JSON，键固定为 overview、ownProduct、competitors、action。"
+            "你是一个亚马逊竞品监控日报助手。请基于输入的已采集数据，生成简洁的中文日报，只返回 JSON，键固定为 ownProduct、competitors。不要输出今日总览、建议动作或其他第三部分。\n\n你的产品变化必须优先检查并简洁说明：Listing 是否仍在售或状态未知、Buy Box 是否仍存在、是否出现跟卖、FBA 配送费是否变化、BSR、销量估算、评论数是否变化。\n\n竞品变化必须优先检查并简洁说明：价格、优惠券或秒杀、评分、主图和 A+ 是否变化、关键词自然排名是上升还是下降。\n\n每个 ASIN 必须单独成段，以 ASIN 开头，ASIN 之间用换行分隔，不能把多个 ASIN 混成一段。评论只写“新增几星评论”或评论数量变化，不要输出评论标题、正文或用户原话。只依据输入数据，不要把状态未知写成确定下架或确定有/无变化；没有变化时写“未发现明显变化”。每个 ASIN 只保留最重要的变化，避免冗长。"
         },
         {
           role: "user",
@@ -145,10 +139,8 @@ export async function generateAiDigestSections(context: ProjectDigestAiContext) 
 
   return {
     sections: {
-      overview: normalizeSection(parsed.overview, fallback.overview),
-      ownProduct: normalizeSection(parsed.ownProduct, fallback.ownProduct),
-      competitors: normalizeSection(parsed.competitors, fallback.competitors),
-      action: normalizeSection(parsed.action, fallback.action)
+      ownProduct: sanitizeDigestText(normalizeSection(parsed.ownProduct, fallback.ownProduct)),
+      competitors: sanitizeDigestText(normalizeSection(parsed.competitors, fallback.competitors))
     },
     usedAi: true
   };

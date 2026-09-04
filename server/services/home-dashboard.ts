@@ -6,15 +6,16 @@ import {
   TrackedAsinRole,
   TrackedAsinStatus
 } from "@prisma/client";
+import { formatShanghaiDate } from "@/lib/shanghai-time";
+import { digestPreview } from "@/lib/digest-display";
 import { db } from "@/server/db";
 import { MONITORING_FRESHNESS_HOURS } from "@/server/services/monitoring-status";
 
 const MAX_ACTIONS = 24;
-const RECENT_WINDOW_DAYS = 7;
 
 export type HomeDashboardAction = {
   id: string;
-  kind: "ALERT" | "SYNC_FAILURE" | "STALE_DATA" | "REVIEW" | "DELIVERY_FAILURE" | "DIGEST_FAILURE";
+  kind: "ALERT" | "SYNC_FAILURE" | "STALE_DATA" | "DELIVERY_FAILURE" | "DIGEST_FAILURE" | "DAILY_DIGEST";
   severity: "CRITICAL" | "WARNING" | "INFO";
   title: string;
   detail: string;
@@ -65,6 +66,12 @@ type ProjectWithAsins = {
     lastSuccessAt: Date | null;
     consecutiveFailures: number;
   }>;
+  dailyDigestRuns: Array<{
+    id: string;
+    digestDate: Date;
+    status: string;
+    summary: string;
+  }>;
 };
 
 function isStale(lastSuccessAt: Date | null, staleBefore: Date) {
@@ -85,9 +92,8 @@ function projectHref(projectId: string, section: string) {
 
 export async function getHomeDashboard(userId: string, now = new Date()): Promise<HomeDashboard> {
   const staleBefore = new Date(now.getTime() - MONITORING_FRESHNESS_HOURS * 60 * 60 * 1000);
-  const recentReviewBefore = new Date(now.getTime() - RECENT_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
-  const [projects, failedSyncJobs, openAlerts, failedDeliveries, failedDigests, recentReviews] = await Promise.all([
+  const [projects, failedSyncJobs, openAlerts, failedDeliveries, failedDigests] = await Promise.all([
     db.project.findMany({
       where: { userId },
       select: {
@@ -103,6 +109,16 @@ export async function getHomeDashboard(userId: string, now = new Date()): Promis
             status: true,
             lastSuccessAt: true,
             consecutiveFailures: true
+          }
+        },
+        dailyDigestRuns: {
+          orderBy: { digestDate: "desc" },
+          take: 1,
+          select: {
+            id: true,
+            digestDate: true,
+            status: true,
+            summary: true
           }
         }
       },
@@ -174,28 +190,6 @@ export async function getHomeDashboard(userId: string, now = new Date()): Promis
       orderBy: { updatedAt: "desc" },
       take: 8
     }),
-    db.productReview.findMany({
-      where: {
-        rating: { lte: 3 },
-        firstSeenAt: { gte: recentReviewBefore },
-        trackedAsin: { project: { userId } }
-      },
-      select: {
-        id: true,
-        rating: true,
-        title: true,
-        firstSeenAt: true,
-        trackedAsin: {
-          select: {
-            id: true,
-            asin: true,
-            project: { select: { id: true, name: true, marketplace: true } }
-          }
-        }
-      },
-      orderBy: { firstSeenAt: "desc" },
-      take: 8
-    })
   ]);
 
   const typedProjects = projects as ProjectWithAsins[];
@@ -287,22 +281,6 @@ export async function getHomeDashboard(userId: string, now = new Date()): Promis
     });
   }
 
-  for (const review of recentReviews) {
-    actions.push({
-      id: `review:${review.id}`,
-      kind: "REVIEW",
-      severity: review.rating <= 2 ? "WARNING" : "INFO",
-      title: `${review.trackedAsin.asin} 新增 ${review.rating} 星评论`,
-      detail: review.title ?? "发现新的低星评论，建议查看用户原声。",
-      projectId: review.trackedAsin.project.id,
-      projectName: review.trackedAsin.project.name,
-      marketplace: review.trackedAsin.project.marketplace,
-      asin: review.trackedAsin.asin,
-      occurredAt: review.firstSeenAt,
-      href: projectHref(review.trackedAsin.project.id, "reviews")
-    });
-  }
-
   for (const project of typedProjects) {
     for (const asin of project.trackedAsins) {
       if (!asin.lastSuccessAt && asin.consecutiveFailures > 0) continue;
@@ -330,6 +308,26 @@ export async function getHomeDashboard(userId: string, now = new Date()): Promis
     .sort((a, b) => severityRank(a.severity) - severityRank(b.severity) || b.occurredAt.getTime() - a.occurredAt.getTime())
     .slice(0, MAX_ACTIONS);
 
+  const dailyDigestActions: HomeDashboardAction[] = typedProjects.flatMap((project) => {
+    const digest = project.dailyDigestRuns[0];
+    if (!digest) return [];
+
+    return [{
+      id: `daily-digest:${digest.id}`,
+      kind: "DAILY_DIGEST",
+      severity: "INFO",
+      title: `最近日报 · ${formatShanghaiDate(digest.digestDate)}`,
+      detail: digestPreview(digest.summary) || "日报暂无摘要内容。",
+      projectId: project.id,
+      projectName: project.name,
+      marketplace: project.marketplace,
+      asin: null,
+      occurredAt: digest.digestDate,
+      href: projectHref(project.id, "digest")
+    } satisfies HomeDashboardAction];
+  });
+  const visibleActions = dedupedActions.length ? dedupedActions : dailyDigestActions.slice(0, MAX_ACTIONS);
+
   const projectHealth = typedProjects.map((project) => {
     const activeAsins = project.trackedAsins;
     const staleAsins = activeAsins.filter((asin) => isStale(asin.lastSuccessAt, staleBefore));
@@ -351,7 +349,7 @@ export async function getHomeDashboard(userId: string, now = new Date()): Promis
       failedAsinCount: failedAsins.length,
       latestSuccessAt,
       attentionCount: projectActions.length,
-      digestStatus: null
+      digestStatus: project.dailyDigestRuns[0]?.status ?? null
     } satisfies HomeDashboardProject;
   });
 
@@ -365,10 +363,10 @@ export async function getHomeDashboard(userId: string, now = new Date()): Promis
       activeAsinCount: activeAsins.length,
       freshAsinCount,
       staleAsinCount,
-      attentionCount: dedupedActions.length,
+      attentionCount: visibleActions.length,
       freshnessPercent: activeAsins.length ? Math.round((freshAsinCount / activeAsins.length) * 100) : 0
     },
-    actions: dedupedActions,
+    actions: visibleActions,
     projects: projectHealth
   };
 }

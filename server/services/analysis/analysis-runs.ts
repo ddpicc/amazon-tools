@@ -47,7 +47,7 @@ function productResult(snapshot: Awaited<ReturnType<typeof fetchProductRequest>>
     category: data.category,
     capturedAt: data.capturedAt.toISOString(),
     sourceKind: toDataSourceKind(snapshot.source),
-    limitation: snapshot.source === "mock" ? "模拟数据仅用于演示，不代表 Amazon 实时事实。" : "公开 Provider 数据可能存在延迟或字段缺失。"
+    limitation: snapshot.source === "mock" ? "模拟数据仅用于演示，不代表 Amazon 实时事实。" : "公开数据服务可能存在延迟或字段缺失。"
   };
 }
 
@@ -109,7 +109,7 @@ async function executeReviewInsights(runId: string) {
     await completeDataCapture(capture.id, response.rawPayload as Prisma.InputJsonValue, capturedAt);
     const reviews = response.reviews.map((review) => ({ id: review.id, rating: review.rating, title: review.title, content: review.content, reviewerName: review.reviewerName, isVerified: review.isVerified, reviewDate: review.reviewDate?.toISOString() ?? null, helpfulCount: review.helpfulCount, productVariant: review.productVariant, page: review.page, imageUrls: review.imageUrls }));
     const ai = await generateReviewAiSummary({ asin, marketplace: input.marketplace, reviews });
-    await db.$transaction(async (tx) => { await tx.analysisEvidence.deleteMany({ where: { analysisRunId: run.id } }); await tx.analysisEvidence.createMany({ data: reviews.filter((review) => review.content).slice(0, 20).map((review, index) => ({ analysisRunId: run.id, label: `评论原话 ${index + 1}（${review.rating} 星）`, excerpt: `${review.title ? `${review.title} — ` : ""}${review.content}`.slice(0, 1000), fieldPath: "Reveyes.reviews", observedAt: capturedAt })) }); await tx.analysisRun.update({ where: { id: run.id }, data: { status: "SUCCESS", provider: "REVEYES + OPENAI", model: ai.model, sourceAsOf: capturedAt, resultJson: { asin, marketplace: input.marketplace, taskId: response.taskId, filters, reviews, totalReviews: reviews.length, analyzedReviewCount: ai.analyzedReviewCount, aiSummary: ai.summary, sourceKind: "LIVE_PROVIDER", limitation: `Reveyes 按请求页数返回评论；AI 最多分析前 ${ai.analyzedReviewCount} 条，每条正文最多 1200 个字符。` } as Prisma.InputJsonValue, completedAt: new Date(), errorCode: null, errorMessage: null } }); });
+    await db.$transaction(async (tx) => { await tx.analysisEvidence.deleteMany({ where: { analysisRunId: run.id } }); await tx.analysisEvidence.createMany({ data: reviews.filter((review) => review.content).slice(0, 20).map((review, index) => ({ analysisRunId: run.id, label: `评论原话 ${index + 1}（${review.rating} 星）`, excerpt: `${review.title ? `${review.title} — ` : ""}${review.content}`.slice(0, 1000), fieldPath: "Reveyes.reviews", observedAt: capturedAt })) }); await tx.analysisRun.update({ where: { id: run.id }, data: { status: "SUCCESS", provider: "REVEYES + OPENAI", model: ai.model, sourceAsOf: capturedAt, resultJson: { asin, marketplace: input.marketplace, taskId: response.taskId, filters, reviews, totalReviews: reviews.length, analyzedReviewCount: ai.analyzedReviewCount, aiSummary: ai.summary, sourceKind: "LIVE_PROVIDER", limitation: `本次按请求页数返回评论；AI 最多分析前 ${ai.analyzedReviewCount} 条，每条正文最多 1200 个字符。` } as Prisma.InputJsonValue, completedAt: new Date(), errorCode: null, errorMessage: null } }); });
   } catch (error) { await failDataCapture(capture.id, error).catch(() => null); await db.analysisRun.update({ where: { id: run.id }, data: { status: "FAILED", completedAt: new Date(), errorCode: "REVIEW_INSIGHTS_ERROR", errorMessage: error instanceof Error ? error.message : "评论分析失败" } }); }
   return db.analysisRun.findUniqueOrThrow({ where: { id: run.id } });
 }
@@ -152,7 +152,7 @@ async function executeKeywordResearch(runId: string) {
       declinedKeywordCount: compared.filter((item) => (item.naturalRankChange ?? 0) < 0).length,
       previousCapturedAt: previousCapturedAt?.toISOString() ?? null
     };
-    await db.analysisRun.update({ where: { id: run.id }, data: { status: "SUCCESS", provider: "SORFTIME", sourceAsOf: capturedAt, resultJson: { asin, keywords, summary, sourceKind: toDataSourceKind(response.source), limitation: response.source === "mock" ? "模拟关键词数据仅用于演示。" : "ASINRequestKeyword 提供关键词覆盖、排名与搜索量/CPC 估算；不提供 Amazon 会话、转化或自然/广告流量归因。" } as Prisma.InputJsonValue, completedAt: capturedAt, errorCode: null, errorMessage: null } });
+    await db.analysisRun.update({ where: { id: run.id }, data: { status: "SUCCESS", provider: "SORFTIME", sourceAsOf: capturedAt, resultJson: { asin, keywords, summary, sourceKind: toDataSourceKind(response.source), limitation: response.source === "mock" ? "模拟关键词数据仅用于演示。" : "公开关键词数据提供关键词覆盖、排名与搜索量/CPC 估算；不提供 Amazon 会话、转化或自然/广告流量归因。" } as Prisma.InputJsonValue, completedAt: capturedAt, errorCode: null, errorMessage: null } });
   } catch (error) { await failDataCapture(capture.id, error).catch(() => null); await db.analysisRun.update({ where: { id: run.id }, data: { status: "FAILED", completedAt: new Date(), errorCode: "KEYWORD_PROVIDER_ERROR", errorMessage: error instanceof Error ? error.message : "关键词研究失败" } }); }
   return db.analysisRun.findUniqueOrThrow({ where: { id: run.id } });
 }
@@ -195,7 +195,7 @@ async function executeListingDiagnosis(runId: string) {
       { label: "主图与 A+", status: hasImages ? "PASS" : "ACTION", advice: hasImages ? `已采集 ${imageCount} 张商品图${hasAPlusImages ? `，${aPlusImageCount} 张 A+ 图片` : "；未采集到 A+ 图片"}。` : "未采集到商品图，建议核对 Listing 素材或采集响应。" },
       { label: "关键词覆盖", status: tracked.keywordSnapshots.length ? "PASS" : "ACTION", advice: tracked.keywordSnapshots.length ? `已有 ${tracked.keywordSnapshots.length} 条已保存关键词观察；可在“关键词分析”查看排名变化与需求信号。` : "尚无关键词观察，请先运行关键词分析。" }
     ];
-    await db.analysisRun.update({ where: { id: run.id }, data: { status: "SUCCESS", provider: "LOCAL_FACTS", sourceAsOf: snapshot.capturedAt, resultJson: { asin: tracked.asin, findings, limitation: "诊断只读取已保存的 Listing 快照与关键词观察，不请求外部 Provider，也不推断未采集字段。" } as Prisma.InputJsonValue, completedAt: new Date(), errorCode: null, errorMessage: null } });
+    await db.analysisRun.update({ where: { id: run.id }, data: { status: "SUCCESS", provider: "LOCAL_FACTS", sourceAsOf: snapshot.capturedAt, resultJson: { asin: tracked.asin, findings, limitation: "诊断只读取已保存的 Listing 快照与关键词观察，不请求外部数据服务，也不推断未采集字段。" } as Prisma.InputJsonValue, completedAt: new Date(), errorCode: null, errorMessage: null } });
   } catch (error) { await db.analysisRun.update({ where: { id: run.id }, data: { status: "FAILED", completedAt: new Date(), errorCode: "DIAGNOSIS_INPUT_ERROR", errorMessage: error instanceof Error ? error.message : "Listing 诊断失败" } }); }
   return db.analysisRun.findUniqueOrThrow({ where: { id: run.id } });
 }

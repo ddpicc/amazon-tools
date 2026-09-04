@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { auth } from "@/auth";
 import { formatDateTime } from "@/lib/date-time";
+import { sanitizeDigestText } from "@/lib/digest-display";
 import { formatShanghaiDate } from "@/lib/shanghai-time";
 import { MetricCard, Surface } from "@/components/projects/project-workspace-shell";
 import { db } from "@/server/db";
 import { getProjectMonitoringHistory } from "@/server/services/project-monitoring-history";
 import { DataProvenance } from "@/components/projects/data-provenance";
+import { ManualDigestButton } from "@/components/projects/manual-digest-button";
 
 function statusLabel(status: string) {
   if (status === "SUCCESS") return "Delivered";
@@ -67,12 +69,15 @@ export default async function ProjectDigestPage({ params }: { params: { projectI
             查看每日监控报告、告警投递与通知渠道健康状态。
           </p>
         </div>
-        <Link
-          href={`/projects/${project.id}/settings`}
-          className="flex w-fit items-center gap-2 rounded-lg bg-[var(--md-primary)] px-4 py-2 font-label text-sm font-semibold text-[var(--md-on-primary)] shadow-[0_0_15px_rgba(249,188,69,0.15)] transition hover:bg-[var(--md-primary-dim)]"
-        >
-          Delivery Settings
-        </Link>
+        <div className="flex flex-col items-stretch gap-3 sm:items-end">
+          <ManualDigestButton projectId={project.id} />
+          <Link
+            href={`/projects/${project.id}/settings`}
+            className="flex w-fit items-center gap-2 self-end rounded-lg border border-[var(--md-outline-variant)] px-4 py-2 font-label text-sm font-semibold text-[var(--md-on-surface)] transition hover:border-[var(--md-primary)] hover:text-[var(--md-primary)]"
+          >
+            Delivery Settings
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -83,8 +88,7 @@ export default async function ProjectDigestPage({ params }: { params: { projectI
       </div>
 
       <Surface>
-        <h2 className="font-headline text-lg font-semibold text-[var(--md-on-surface)]">报告数据来源</h2>
-        <p className="mt-1 font-label text-sm text-[var(--md-on-surface-variant)]">日报基于本项目已保存的监控事实生成；不会把模拟采集当作实时 Amazon 数据。</p>
+        <h2 className="font-headline text-lg font-semibold text-[var(--md-on-surface)]">报告数据说明</h2>
         <DataProvenance capture={latestCapture} />
       </Surface>
 
@@ -106,8 +110,7 @@ export default async function ProjectDigestPage({ params }: { params: { projectI
                   {digest.sentAt ? formatDateTime(digest.sentAt) : "未发送"}
                 </span>
               </div>
-              {digest.errorMessage ? <p className="mt-3 font-label text-sm text-[var(--md-error)]">{digest.errorMessage}</p> : null}
-              <pre className="mt-4 whitespace-pre-wrap rounded-lg bg-[var(--md-surface-container-lowest)] p-4 font-label text-sm leading-6 text-[var(--md-on-surface-variant)]">{digest.summary}</pre>
+              {digest.errorMessage ? <p className="mt-3 font-label text-sm text-[var(--md-error)]">{sanitizeDigestText(digest.errorMessage)}</p> : null}
             </div>
           ))}
           {!history.dailyDigests.length ? (

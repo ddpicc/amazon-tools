@@ -31,7 +31,7 @@ function fallback(own: ListingFact, competitors: ListingFact[], refresh: Array<{
     imageSuggestions: [{ observation: `自有 Listing 已采集 ${own.photoUrls.length} 张商品图和 ${own.ebcPhotoUrls.length} 张 A+ 图片；竞品图片数量为 ${competitors.map((item) => `${item.asin}: ${item.photoUrls.length}`).join("，") || "无"}。`, competitorStrength: "未使用 AI 图像理解，因此不对图片中的具体元素作推断。", recommendedChange: "请在配置 AI 模型后重新运行，以获得基于实际图片内容的逐图建议。" }],
     copySuggestions: [{ area: "标题、五点与描述", observation: `当前仅保存了标题、描述与属性事实；自有标题长度 ${own.title?.length ?? 0}，描述长度 ${own.description?.length ?? 0}。`, recommendation: "先补齐产品卖点、使用场景、规格和差异化证据，再结合关键词覆盖重写。", suggestedRewrite: null }],
     keywordAndAdvertising: { keywordGaps: gaps, recommendedKeywords: gaps, suggestedSearchTerms: gaps.join(" "), advertisingPlan: "先从竞品覆盖且自有快照未出现的关键词中人工筛选相关词，按精准、词组、广泛匹配分组测试；本结果不是广告效果或流量归因数据。" },
-    limitations: ["本次未使用 AI 模型，图片和文案建议仅为事实驱动的待办。", "关键词、搜索量和 CPC 来自公开 Provider 估算，不代表实际广告流量、转化或 Amazon Search Term 的合规结论。"]
+    limitations: ["本次未使用 AI 模型，图片和文案建议仅为事实驱动的待办。", "关键词、搜索量和 CPC 来自公开数据服务估算，不代表实际广告流量、转化或 Amazon Search Term 的合规结论。"]
   };
 }
 

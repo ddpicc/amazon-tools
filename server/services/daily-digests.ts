@@ -15,6 +15,7 @@ import {
 } from "@/server/services/ai-digest-summary";
 import { sendEmailMessage } from "@/server/services/email-delivery";
 import { ensureProjectNotificationChannels } from "@/server/services/notification-channels";
+import { getCurrencyDivisor } from "@/server/sorftime/marketplaces";
 
 type SnapshotRecord = {
   capturedAt: Date;
@@ -26,6 +27,7 @@ type SnapshotRecord = {
   sellerCount: number | null;
   variantCount: number | null;
   buyboxSeller: string | null;
+  fbaFee: number | null;
   coupon: number | null;
   dealType: string | null;
   photoUrls: unknown;
@@ -42,6 +44,12 @@ type SnapshotRecord = {
   brand: string | null;
   category: string | null;
   stockStatus: string | null;
+};
+
+type KeywordSnapshotRecord = {
+  keyword: string;
+  naturalRank: number | null;
+  capturedAt: Date;
 };
 
 function escapeHtml(value: string) {
@@ -155,13 +163,69 @@ function boolLabel(value: boolean | null) {
   return value ? "有" : "无";
 }
 
+function stockStatusLabel(value: string | null) {
+  if (!value) return "未知";
+  const normalized = value.trim().toLowerCase();
+  if (["in_stock", "available", "active"].includes(normalized)) return "在售";
+  if (["out_of_stock", "unavailable", "inactive", "removed", "off_shelf"].includes(normalized)) return "不可售/可能下架";
+  return normalized === "unknown" ? "状态未知" : value;
+}
+
+function sellerLabel(value: number | null) {
+  if (value === null) return "未知";
+  if (value <= 1) return "无跟卖";
+  return `有 ${value - 1} 个跟卖`;
+}
+
+function buyboxLabel(value: string | null) {
+  return value?.trim() ? "有" : "无";
+}
+
+function feeLabel(value: number | null, marketplace: string) {
+  return value === null ? "未知" : `$${(value / getCurrencyDivisor(marketplace)).toFixed(2)}`;
+}
+
+function buildKeywordChangeLines(snapshots: KeywordSnapshotRecord[]) {
+  const captureDates = Array.from(new Set(snapshots.map((item) => item.capturedAt.getTime())))
+    .sort((a, b) => b - a)
+    .slice(0, 2);
+  const latestCapturedAt = captureDates[0];
+  const previousCapturedAt = captureDates[1];
+  if (latestCapturedAt === undefined || previousCapturedAt === undefined) return [];
+
+  const latest = new Map(
+    snapshots
+      .filter((item) => item.capturedAt.getTime() === latestCapturedAt)
+      .map((item) => [item.keyword.trim().toLowerCase(), item])
+  );
+  const previous = new Map(
+    snapshots
+      .filter((item) => item.capturedAt.getTime() === previousCapturedAt)
+      .map((item) => [item.keyword.trim().toLowerCase(), item])
+  );
+  const changes: string[] = [];
+
+  for (const key of new Set([...latest.keys(), ...previous.keys()])) {
+    const latestRank = latest.get(key)?.naturalRank ?? null;
+    const previousRank = previous.get(key)?.naturalRank ?? null;
+    if (latestRank === previousRank) continue;
+    const keyword = latest.get(key)?.keyword ?? previous.get(key)?.keyword ?? key;
+    const previousLabel = previousRank === null ? "未上榜" : `#${previousRank}`;
+    const latestLabel = latestRank === null ? "未上榜" : `#${latestRank}`;
+    const direction = previousRank === null ? "新上榜" : latestRank === null ? "跌出排名" : latestRank < previousRank ? "上升" : "下降";
+    changes.push(`关键词“${keyword}”自然排名${direction}：${previousLabel} → ${latestLabel}`);
+  }
+
+  return changes.slice(0, 8);
+}
+
 function pushIfChanged(lines: string[], next: string | null) {
   if (next) {
     lines.push(next);
   }
 }
 
-function buildChangeLines(latest: SnapshotRecord | null, previous: SnapshotRecord | null) {
+function buildChangeLines(latest: SnapshotRecord | null, previous: SnapshotRecord | null, marketplace: string) {
   if (!latest) {
     return [];
   }
@@ -201,6 +265,10 @@ function buildChangeLines(latest: SnapshotRecord | null, previous: SnapshotRecor
     );
   }
 
+  if (stockStatusLabel(latest.stockStatus) !== stockStatusLabel(previous.stockStatus)) {
+    pushIfChanged(lines, `Listing 状态从 ${stockStatusLabel(previous.stockStatus)} 变为 ${stockStatusLabel(latest.stockStatus)}`);
+  }
+
   const latestMonthlySales = getMonthlySales(latest);
   const previousMonthlySales = getMonthlySales(previous);
   if (
@@ -220,8 +288,8 @@ function buildChangeLines(latest: SnapshotRecord | null, previous: SnapshotRecor
     pushIfChanged(lines, `日销量从 ${previousDailySales} 变为 ${latestDailySales}`);
   }
 
-  if (latest.sellerCount !== null && previous.sellerCount !== null && latest.sellerCount !== previous.sellerCount) {
-    pushIfChanged(lines, `卖家数量从 ${previous.sellerCount} 变为 ${latest.sellerCount}`);
+  if (latest.sellerCount !== previous.sellerCount) {
+    pushIfChanged(lines, `跟卖状态从 ${sellerLabel(previous.sellerCount)} 变为 ${sellerLabel(latest.sellerCount)}`);
   }
 
   if (latest.variantCount !== null && previous.variantCount !== null && latest.variantCount !== previous.variantCount) {
@@ -230,6 +298,10 @@ function buildChangeLines(latest: SnapshotRecord | null, previous: SnapshotRecor
 
   if (latest.isFBA !== null && previous.isFBA !== null && latest.isFBA !== previous.isFBA) {
     pushIfChanged(lines, `配送方式从 ${previous.isFBA ? "FBA" : "FBM"} 变为 ${latest.isFBA ? "FBA" : "FBM"}`);
+  }
+
+  if (latest.fbaFee !== previous.fbaFee) {
+    pushIfChanged(lines, `FBA 配送费从 ${feeLabel(previous.fbaFee, marketplace)} 变为 ${feeLabel(latest.fbaFee, marketplace)}`);
   }
 
   if (latest.shipCost !== null && previous.shipCost !== null && latest.shipCost !== previous.shipCost) {
@@ -248,12 +320,13 @@ function buildChangeLines(latest: SnapshotRecord | null, previous: SnapshotRecor
     pushIfChanged(lines, `类目从 ${previous.category} 变为 ${latest.category}`);
   }
 
-  if (latest.stockStatus && previous.stockStatus && latest.stockStatus !== previous.stockStatus) {
-    pushIfChanged(lines, `在售状态从 ${previous.stockStatus} 变为 ${latest.stockStatus}`);
-  }
-
-  if (latest.buyboxSeller && previous.buyboxSeller && latest.buyboxSeller !== previous.buyboxSeller) {
-    pushIfChanged(lines, `Buybox 卖家从 ${previous.buyboxSeller} 变为 ${latest.buyboxSeller}`);
+  if (latest.buyboxSeller !== previous.buyboxSeller) {
+    pushIfChanged(
+      lines,
+      buyboxLabel(latest.buyboxSeller) === buyboxLabel(previous.buyboxSeller)
+        ? "Buy Box 仍在，但卖家已更换"
+        : `Buy Box 从${buyboxLabel(previous.buyboxSeller)}变为${buyboxLabel(latest.buyboxSeller)}`
+    );
   }
 
   if (latest.coupon !== previous.coupon) {
@@ -297,10 +370,10 @@ function buildChangeLines(latest: SnapshotRecord | null, previous: SnapshotRecor
 }
 
 function significantListingChanges(lines: string[]) {
-  return lines.filter((line) => /价格|Coupon|Deal|秒杀|变体数|评分|BSR|主图|A\+ 图片/.test(line));
+  return lines.filter((line) => /价格|Coupon|Deal|秒杀|变体数|评分|评论|BSR|主图|A\+ 图片|Listing 状态|Buy Box|跟卖|FBA 配送费|销量|关键词/.test(line));
 }
 
-function buildLatestMetrics(snapshot: SnapshotRecord | null) {
+function buildLatestMetrics(snapshot: SnapshotRecord | null, marketplace: string) {
   if (!snapshot) {
     return {
       price: null,
@@ -311,9 +384,15 @@ function buildLatestMetrics(snapshot: SnapshotRecord | null) {
       monthlySales: null,
       dailySales: null,
       sellerCount: null,
+      sellerStatus: null,
       variantCount: null,
       buyboxSeller: null,
+      buyboxPresent: null,
+      stockStatus: null,
+      isFBA: null,
+      fbaFee: null,
       coupon: null,
+      dealType: null,
       hasVideo: null,
       aPlus: null,
       brandStore: null
@@ -329,9 +408,15 @@ function buildLatestMetrics(snapshot: SnapshotRecord | null) {
     monthlySales: getMonthlySales(snapshot),
     dailySales: getDailySales(snapshot.listingSaleCountOfDaily),
     sellerCount: snapshot.sellerCount,
+    sellerStatus: sellerLabel(snapshot.sellerCount),
     variantCount: snapshot.variantCount,
     buyboxSeller: snapshot.buyboxSeller,
+    buyboxPresent: buyboxLabel(snapshot.buyboxSeller),
+    stockStatus: stockStatusLabel(snapshot.stockStatus),
+    isFBA: boolLabel(snapshot.isFBA),
+    fbaFee: snapshot.fbaFee === null ? null : snapshot.fbaFee / getCurrencyDivisor(marketplace),
     coupon: snapshot.coupon,
+    dealType: snapshot.dealType,
     hasVideo: boolLabel(snapshot.hasVideo),
     aPlus: boolLabel(snapshot.aPlus),
     brandStore: boolLabel(snapshot.hasBrandStore)
@@ -448,17 +533,13 @@ function buildDigestHtml(input: {
   competitorCount: number;
   latestPollLabel: string;
   sections: {
-    overview: string;
     ownProduct: string;
     competitors: string;
-    action: string;
   };
 }) {
   const sectionRows = [
-    ["今日总览", input.sections.overview],
     ["你的产品变化", input.sections.ownProduct],
-    ["竞品变化", input.sections.competitors],
-    ["建议关注", input.sections.action]
+    ["竞品变化", input.sections.competitors]
   ]
     .map(
       ([title, body]) => `
@@ -550,6 +631,11 @@ async function buildProjectDigest(projectId: string, digestDate: Date) {
           asin: true,
           title: true,
           role: true,
+          keywordSnapshots: {
+            orderBy: { capturedAt: "desc" },
+            take: 100,
+            select: { keyword: true, naturalRank: true, capturedAt: true }
+          },
           snapshots: {
             orderBy: { capturedAt: "desc" },
             take: 3,
@@ -574,6 +660,7 @@ async function buildProjectDigest(projectId: string, digestDate: Date) {
               aPlus: true,
               hasBrandStore: true,
               isFBA: true,
+              fbaFee: true,
               shipCost: true,
               title: true,
               brand: true,
@@ -619,7 +706,8 @@ async function buildProjectDigest(projectId: string, digestDate: Date) {
   const items = project.trackedAsins.map((trackedAsin) => {
     const latest = (trackedAsin.snapshots[0] ?? null) as SnapshotRecord | null;
     const previous = (trackedAsin.snapshots[1] ?? null) as SnapshotRecord | null;
-    const changeLines = buildChangeLines(latest, previous);
+    const changeLines = buildChangeLines(latest, previous, project.marketplace);
+    const keywordChanges = buildKeywordChangeLines(trackedAsin.keywordSnapshots as KeywordSnapshotRecord[]);
     const recentSnapshots = trackedAsin.snapshots as SnapshotRecord[];
 
     return {
@@ -627,9 +715,10 @@ async function buildProjectDigest(projectId: string, digestDate: Date) {
       title: trackedAsin.title,
       role: trackedAsin.role === TrackedAsinRole.OWN ? "OWN" : "COMPETITOR",
       latestCapturedAt: latest?.capturedAt.toISOString() ?? null,
-      summaryLines: changeLines,
+      summaryLines: [...changeLines, ...keywordChanges],
       recentSnapshots: buildRecentSnapshots(recentSnapshots),
-      latestMetrics: buildLatestMetrics(latest)
+      latestMetrics: buildLatestMetrics(latest, project.marketplace),
+      keywordChanges
     } satisfies DigestContextItem;
   });
 
@@ -639,7 +728,7 @@ async function buildProjectDigest(projectId: string, digestDate: Date) {
   for (const review of newLowStarReviews) {
     const item = ownAsins.find((asin) => asin.asin === review.trackedAsin.asin);
     if (item) {
-      item.summaryLines.push(`新增 ${review.rating} 星评论${review.title ? `：${review.title}` : ""}`);
+      item.summaryLines.push(`新增 ${review.rating} 星评论`);
     }
   }
 
@@ -656,11 +745,7 @@ async function buildProjectDigest(projectId: string, digestDate: Date) {
       .map((item) => ({
         asin: item.asin,
         lines: item.summaryLines
-      })),
-    crossComparisons: buildCrossComparisons(ownAsins, competitorAsins),
-    stabilityNotes: items
-      .filter((item) => item.summaryLines.length === 0)
-      .map((item) => `${item.asin} 主要指标整体稳定`)
+      }))
   };
 
   let aiResult: Awaited<ReturnType<typeof generateAiDigestSections>>;
@@ -669,17 +754,14 @@ async function buildProjectDigest(projectId: string, digestDate: Date) {
   } catch {
     aiResult = {
       sections: {
-        overview:
-          "今天的摘要已回退到规则模式，重点可先关注 own 与竞品在价格、评分、评论和 BSR 上的最新差异。",
         ownProduct:
-          context.ownChanges.flatMap((item) => item.lines.slice(0, 2).map((line) => `${item.asin}：${line}`)).join("；") ||
-          "你的产品今天没有明显变化，核心指标整体稳定。",
+          context.ownChanges
+            .map((item) => `${item.asin}：${item.lines.slice(0, 8).join("；")}`)
+            .join("\n\n") || "你的产品今天没有明显变化，核心指标整体稳定。",
         competitors:
-          context.competitorChanges.flatMap((item) => item.lines.slice(0, 2).map((line) => `${item.asin}：${line}`)).join("；") ||
-          "竞品今天没有明显变化，暂无需要单独点名关注的动作。",
-        action:
-          context.crossComparisons.slice(0, 2).join("；") ||
-          "建议继续关注明天的价格、排名和评论变化，确认当前优势是否持续。"
+          context.competitorChanges
+            .map((item) => `${item.asin}：${item.lines.slice(0, 8).join("；")}`)
+            .join("\n\n") || "竞品今天没有明显变化。"
       },
       usedAi: false
     };

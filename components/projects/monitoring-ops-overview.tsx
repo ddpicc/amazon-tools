@@ -1,4 +1,5 @@
 import type { MonitoringOpsOverview } from "@/server/services/monitoring-ops";
+import { publicText } from "@/lib/public-text";
 
 type MonitoringOpsOverviewProps = {
   overview: MonitoringOpsOverview;
@@ -33,7 +34,7 @@ function failureStyle(label: string) {
     return "bg-amber-500/15 text-amber-300";
   }
 
-  if (label.includes("Sorftime")) {
+  if (label.includes("数据服务")) {
     return "bg-sky-500/15 text-sky-300";
   }
 
@@ -103,7 +104,7 @@ export function MonitoringOpsOverviewPanel({ overview }: MonitoringOpsOverviewPr
                     </span>
                   </p>
                   {item.failureDetail ? <p className={`mt-2 text-xs ${failureDetailStyle(item.failureDetail)}`}>{item.failureDetail}</p> : null}
-                  <p className="mt-2 text-sm text-zinc-400">{item.errorMessage ?? "Unknown poll error"}</p>
+                  <p className="mt-2 text-sm text-zinc-400">{item.errorMessage ? publicText(item.errorMessage) : "Unknown poll error"}</p>
                 </div>
               ))
             ) : (
@@ -136,7 +137,7 @@ export function MonitoringOpsOverviewPanel({ overview }: MonitoringOpsOverviewPr
                   <p className="mt-2 text-sm text-zinc-300">{item.alertTitle}</p>
                   <p className="mt-1 text-sm text-zinc-500">
                     {item.channelName ? `${item.channelName} · ` : ""}
-                    {item.errorMessage ?? "Unknown webhook delivery error"}
+                    {item.errorMessage ? publicText(item.errorMessage) : "Unknown webhook delivery error"}
                   </p>
                 </div>
               ))

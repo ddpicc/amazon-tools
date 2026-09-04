@@ -11,7 +11,7 @@ export async function syncTrackedAsinLowStarReviews(trackedAsinId: string) {
   const capture = await startDataCapture({ userId: tracked.project.userId, projectId: tracked.projectId, trackedAsinId, marketplace: tracked.marketplace, apiName: "ReveyesReviewsFetch", sourceKind: "LIVE_PROVIDER" });
   try {
   const result = await fetchReveyesReviews(tracked.asin, tracked.marketplace, {
-    pages: existingCount ? 1 : 10,
+    pages: existingCount ? 1 : 3,
     filterStar: "all_stars",
     filterSortBy: "recent",
     filterReviewerType: "all_reviews",

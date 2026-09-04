@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { publicText } from "@/lib/public-text";
 
 type Asin = {
   id: string;
@@ -17,7 +18,7 @@ type Progress = {
 };
 
 function text(value: unknown) {
-  return typeof value === "string" ? value : "—";
+  return typeof value === "string" ? publicText(value) : "—";
 }
 function stringList(value: unknown) {
   return Array.isArray(value)
@@ -198,7 +199,7 @@ function DeepAnalysisResult({ result }: { result: Result }) {
               {typeof item.suggestedRewrite === "string" &&
               item.suggestedRewrite ? (
                 <pre className="mt-4 whitespace-pre-wrap rounded-lg bg-[var(--md-surface)] p-4 font-label text-sm leading-6">
-                  {item.suggestedRewrite}
+                  {publicText(item.suggestedRewrite)}
                 </pre>
               ) : null}
             </article>
@@ -215,13 +216,13 @@ function DeepAnalysisResult({ result }: { result: Result }) {
               建议关注的关键词
             </h3>
             <p className="mt-2 font-label text-sm leading-6">
-              {stringList(strategy.recommendedKeywords).join("、") || "—"}
+              {publicText(stringList(strategy.recommendedKeywords).join("、")) || "—"}
             </p>
             <h3 className="mt-5 font-label text-sm font-semibold">
               关键词覆盖缺口
             </h3>
             <p className="mt-2 font-label text-sm leading-6">
-              {stringList(strategy.keywordGaps).join("、") || "—"}
+              {publicText(stringList(strategy.keywordGaps).join("、")) || "—"}
             </p>
           </div>
           <div>
@@ -229,20 +230,20 @@ function DeepAnalysisResult({ result }: { result: Result }) {
               Search Term 候选
             </h3>
             <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-[var(--md-surface)] p-4 font-label text-sm leading-6">
-              {text(strategy.suggestedSearchTerms)}
+              {publicText(text(strategy.suggestedSearchTerms))}
             </pre>
             <h3 className="mt-5 font-label text-sm font-semibold">
               广告测试建议
             </h3>
             <p className="mt-2 font-label text-sm leading-6">
-              {text(strategy.advertisingPlan)}
+              {publicText(text(strategy.advertisingPlan))}
             </p>
           </div>
         </div>
       </section>
       {stringList(result.limitations).length ? (
         <p className="font-label text-xs leading-5 text-[var(--md-on-surface-variant)]">
-          限制：{stringList(result.limitations).join("；")}
+          限制：{publicText(stringList(result.limitations).join("；"))}
         </p>
       ) : null}
       {activeImage ? (
@@ -288,8 +289,9 @@ export function ListingDeepAnalysisForm({
 }) {
   const ownAsins = asins.filter((item) => item.role === "OWN");
   const competitors = asins.filter((item) => item.role === "COMPETITOR");
-  const own = ownAsins[0];
-  const ownTrackedAsinId = own?.id ?? "";
+  const [ownTrackedAsinId, setOwnTrackedAsinId] = useState(
+    ownAsins.length === 1 ? ownAsins[0].id : "",
+  );
   const [competitorIds, setCompetitorIds] = useState(
     competitors.map((item) => item.id),
   );
@@ -329,7 +331,7 @@ export function ListingDeepAnalysisForm({
       );
       if (!response.ok || !response.body) {
         const payload = await response.json().catch(() => null);
-        throw new Error(payload?.error ?? "深度分析失败");
+        throw new Error(publicText(payload?.error ?? "深度分析失败"));
       }
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -371,7 +373,7 @@ export function ListingDeepAnalysisForm({
     } catch (submissionError) {
       setError(
         submissionError instanceof Error
-          ? submissionError.message
+          ? publicText(submissionError.message)
           : "深度分析失败",
       );
     } finally {
@@ -383,11 +385,35 @@ export function ListingDeepAnalysisForm({
     <div className="space-y-7">
       <section className="rounded-2xl border border-[var(--md-outline-variant)] bg-[var(--md-surface-container)] p-5">
         <p className="font-label text-sm text-[var(--md-on-surface-variant)]">
-          将自动使用项目中的自有 Listing：
-          <span className="font-mono font-semibold text-[var(--md-on-surface)]">
-            {own?.asin ?? "—"}
-          </span>
+          {ownAsins.length > 1
+            ? "请选择本次要分析的自有 Listing："
+            : "本次分析使用自有 Listing："}
         </p>
+        <div className="mt-3 grid gap-2 md:grid-cols-2">
+          {ownAsins.map((item) => (
+            <label
+              key={item.id}
+              className="flex cursor-pointer items-start gap-3 rounded-xl border border-[var(--md-outline-variant)] bg-[var(--md-surface)] p-3"
+            >
+              <input
+                className="mt-1"
+                type="radio"
+                name="listing-analysis-own-asin"
+                disabled={busy}
+                checked={ownTrackedAsinId === item.id}
+                onChange={() => setOwnTrackedAsinId(item.id)}
+              />
+              <span>
+                <span className="block font-mono text-sm font-semibold">
+                  {item.asin}
+                </span>
+                <span className="mt-1 block font-label text-xs text-[var(--md-on-surface-variant)]">
+                  {item.title ?? "未采集标题"}
+                </span>
+              </span>
+            </label>
+          ))}
+        </div>
         <div className="mt-5 flex items-center justify-between gap-4">
           <span className="font-label text-sm font-semibold">选择对比竞品</span>
           <label className="flex items-center gap-2 font-label text-sm">

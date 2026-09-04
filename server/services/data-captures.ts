@@ -51,7 +51,7 @@ export function failDataCapture(id: string, error: unknown) {
 }
 
 export function sourceLabel(sourceKind: DataSourceKind | null | undefined) {
-  if (sourceKind === "LIVE_PROVIDER") return "实时 Provider 数据";
+  if (sourceKind === "LIVE_PROVIDER") return "实时数据";
   if (sourceKind === "MOCK") return "模拟数据";
   if (sourceKind === "IMPORT") return "导入数据";
   if (sourceKind === "USER_INPUT") return "用户输入";

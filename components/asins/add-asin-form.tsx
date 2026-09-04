@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { publicText } from "@/lib/public-text";
 import {
   getBillingErrorHint,
   isBillingLimitErrorCode,
@@ -22,49 +23,64 @@ export function AddAsinForm({ projectId }: AddAsinFormProps) {
   const [errorCode, setErrorCode] = useState<string | null>(null);
 
   async function submit() {
-    if (!value.trim()) return;
+    if (!value.trim()) {
+      setErrorCode(null);
+      setSuccessMessage(null);
+      setErrorMessage("请输入 ASIN 后再添加商品。");
+      return;
+    }
 
     setLoading(true);
     setErrorMessage(null);
     setSuccessMessage(null);
     setErrorCode(null);
 
-    const res = await fetch(`/api/projects/${projectId}/asins`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ asin: value.trim(), role })
-    });
+    try {
+      const res = await fetch(`/api/projects/${projectId}/asins`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ asin: value.trim(), role })
+      });
 
-    setLoading(false);
+      const data = await res.json().catch(() => null);
 
-    const data = await res.json().catch(() => null);
+      if (res.ok) {
+        const initialCollections = Array.isArray(data?.initialCollections) ? data.initialCollections : [];
+        const failedInitialCollections = initialCollections.filter((item: { status?: string }) => item.status === "FAILED");
+        const skippedInitialCollections = initialCollections.filter((item: { status?: string }) => item.status === "SKIPPED");
 
-    if (res.ok) {
-      const initialCollections = Array.isArray(data?.initialCollections) ? data.initialCollections : [];
-      const failedInitialCollections = initialCollections.filter((item: { status?: string }) => item.status === "FAILED");
-      const skippedInitialCollections = initialCollections.filter((item: { status?: string }) => item.status === "SKIPPED");
+        setValue("");
+        setRole("COMPETITOR");
+        setSuccessMessage(
+          failedInitialCollections.length
+            ? `ASIN 已添加，但 ${failedInitialCollections.length} 个对象首次采集失败，系统会在下次定时任务中重试。`
+            : skippedInitialCollections.length
+              ? "该 ASIN 已在项目中，未重复触发采集。"
+              : "ASIN 已添加并完成首次采集。"
+        );
+        router.refresh();
+        return;
+      }
 
-      setValue("");
-      setRole("COMPETITOR");
-      setSuccessMessage(
-        failedInitialCollections.length
-          ? `ASIN 已添加，但 ${failedInitialCollections.length} 个对象首次采集失败，系统会在下次定时任务中重试。`
-          : skippedInitialCollections.length
-            ? "该 ASIN 已在项目中，未重复触发采集。"
-            : "ASIN 已添加并完成首次采集。"
-      );
-      router.refresh();
-      return;
+      const hint = isBillingLimitErrorCode(data?.code) ? getBillingErrorHint(data.code) : null;
+      setErrorCode(isBillingLimitErrorCode(data?.code) ? data.code : null);
+      setErrorMessage(hint ? `${data?.error ?? "添加 ASIN 失败，请检查额度与输入内容后重试。"}\n${hint}` : data?.error ?? "添加 ASIN 失败，请检查输入内容后重试。");
+    } catch {
+      setErrorMessage("添加商品请求失败，请检查网络连接后重试。");
+    } finally {
+      setLoading(false);
     }
-
-    const hint = isBillingLimitErrorCode(data?.code) ? getBillingErrorHint(data.code) : null;
-    setErrorCode(isBillingLimitErrorCode(data?.code) ? data.code : null);
-    setErrorMessage(hint ? `${data?.error ?? "添加 ASIN 失败，请检查额度与输入内容后重试。"}\n${hint}` : data?.error ?? "添加 ASIN 失败，请检查额度与输入内容后重试。");
   }
 
   return (
     <div className="space-y-2">
-      <div className="flex items-end gap-3">
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit();
+        }}
+        className="flex items-end gap-3"
+      >
         <select
           value={role}
           onChange={(e) => setRole(e.target.value as "OWN" | "COMPETITOR")}
@@ -80,13 +96,13 @@ export function AddAsinForm({ projectId }: AddAsinFormProps) {
           className="flex-1 rounded-lg border border-[var(--md-outline-variant)] bg-[var(--md-surface-container-low)] px-4 py-2.5 font-label text-sm text-[var(--md-on-surface)] placeholder:text-[var(--md-outline)]"
         />
         <button
-          onClick={submit}
+          type="submit"
           disabled={loading}
           className="flex items-center gap-2 rounded-lg bg-[var(--md-primary)] px-4 py-2.5 font-headline text-sm font-semibold text-[var(--md-on-primary)] shadow-lg shadow-[var(--md-primary)]/10 transition hover:bg-[var(--md-primary-dim)] disabled:opacity-60"
         >
           {loading ? "添加中..." : "添加商品"}
         </button>
-      </div>
+      </form>
       {successMessage ? (
         <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/8 p-3 text-sm text-emerald-300">
           {successMessage}
@@ -94,7 +110,7 @@ export function AddAsinForm({ projectId }: AddAsinFormProps) {
       ) : null}
       {errorMessage ? (
         <div className="space-y-3 rounded-xl border border-[var(--md-error)]/25 bg-[var(--md-error)]/8 p-3">
-          <p className="whitespace-pre-line text-sm text-[var(--md-error)]">{errorMessage}</p>
+          <p className="whitespace-pre-line text-sm text-[var(--md-error)]">{publicText(errorMessage)}</p>
           {isUpgradeEligibleBillingErrorCode(errorCode) ? (
             <Link
               href="/billing?from=add-asin#plans"

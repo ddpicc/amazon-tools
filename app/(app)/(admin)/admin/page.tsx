@@ -30,7 +30,7 @@ export default async function AdminOverviewPage() {
           管理总览
         </h1>
         <p className="mt-3 text-sm text-[var(--md-on-surface-variant)]">
-          这里集中查看系统规模、Sorftime 积分和最近的新增情况。
+          这里集中查看系统规模、数据服务积分和最近的新增情况。
         </p>
       </div>
 
@@ -51,7 +51,7 @@ export default async function AdminOverviewPage() {
           hint={`监控订阅记录 ${overview.activeSubscriptionCount.toLocaleString("zh-CN")} 条`}
         />
         <AdminMetricCard
-          label="Sorftime 剩余积分"
+          label="数据服务剩余积分"
           value={overview.sorftimeCoins === null ? "--" : overview.sorftimeCoins.toLocaleString("zh-CN")}
           hint={overview.sorftimeRequestLeft === null ? "余额为全局统一积分" : `接口剩余请求：${overview.sorftimeRequestLeft}`}
         />

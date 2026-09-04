@@ -251,7 +251,7 @@ export function ProjectSettingsPanel({
   }
 
   async function removeProject() {
-    if (!window.confirm("删除项目会先解除 Sorftime 订阅，再删除本地历史数据。确认继续吗？")) return;
+    if (!window.confirm("删除项目会先解除商品监控订阅，再删除本地历史数据。确认继续吗？")) return;
     setDeleting(true);
     setMessage(null);
     const res = await fetch(`/api/projects/${projectId}`, { method: "DELETE" });
